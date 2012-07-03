@@ -1,3 +1,6 @@
 [submodule "pad-us"]
 	path = pad-us
 	url = git@github.com:RDCEP/pad-us.git
+[submodule "nbcd"]
+	path = nbcd
+	url = git@github.com:RDCEP/NBCD.git
