@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE gxw SYSTEM "grass-gxw.dtd">
+<gxw>
+    <layer_manager dim="1332,52,575,600">
+    </layer_manager>
+    <display render="1" mode="1" showCompExtent="0" constrainRes="0" dim="0,0,1297,1233" extent="-2493045.000000,177285.000000,2342655.000000,3310005.000000">
+        <layer type="raster" name="grid_5min@PERMANENT" checked="0" opacity="1.000000">
+            <task name="d.rast">
+                <parameter name="map">
+                    <value>grid_5min@PERMANENT</value>
+                </parameter>
+                <flag name="o" />
+            </task>
+        </layer>
+        <layer type="raster" name="gap@PERMANENT" checked="0" opacity="1.000000">
+            <task name="d.rast">
+                <parameter name="map">
+                    <value>gap@PERMANENT</value>
+                </parameter>
+                <flag name="o" />
+            </task>
+        </layer>
+        <layer type="raster" name="nbcdWA@nbcdWA" checked="0" opacity="1.000000">
+            <task name="d.rast">
+                <parameter name="map">
+                    <value>nbcdWA@nbcdWA</value>
+                </parameter>
+                <flag name="o" />
+            </task>
+        </layer>
+        <layer type="raster" name="nbcd2000Zero@PERMANENT" checked="1" opacity="1.000000">
+            <selected />
+            <task name="d.rast">
+                <parameter name="map">
+                    <value>nbcd2000Zero@PERMANENT</value>
+                </parameter>
+                <flag name="o" />
+            </task>
+        </layer>
+        <layer type="raster" name="nlcd2006@PERMANENT" checked="1" opacity="1.000000">
+            <task name="d.rast">
+                <parameter name="map">
+                    <value>nlcd2006@PERMANENT</value>
+                </parameter>
+                <flag name="o" />
+            </task>
+        </layer>
+    </display>
+</gxw>

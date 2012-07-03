@@ -498,3 +498,66 @@ the Makefile.
   
   zip( "pad-us_nlcd.zip", list.files( patt= "^fracs.*?\\csv$"))
 #+end_src
+
+
+** generate NBCD statistics
+
+#+NAME: writeNbcdStats
+#+begin_src R 
+  library( reshape)
+  library( Hmisc)
+  library( data.table)
+  
+  
+  stats <-
+    read.csv( "statsNbcd.csv",
+             na.strings= "*",
+             col.names= c( "cell", "nlcd", "gap", "nbcd", "n"),
+             colClasses= c("numeric", "factor", "factor", "numeric"))
+  
+  stats <-
+    within(
+      stats,
+      { levels( gap) <- c( levels( gap), "0")
+        gap[ is.na( gap)] <- "0"
+        gap <- combine_factor( gap, c(0,1,1,1,0))
+        levels( gap) <- c( "no", "yes")
+        nbcd[ is.na( nbcd)] <- 0
+      })
+  
+  dt <- data.table( stats)
+  setkey( dt, cell, nlcd, gap)
+  
+  ## wm <-
+  ##     ddply(
+  ##       .data= idata.frame( stats),
+  ##       .variables= .(cell, nlcd, gap),
+  ##       .fun= function( df) with( df, weighted.mean( nbcd, n)),
+  ##       .progress= "text",
+  ##       .parallel= TRUE)
+  
+  wm <- dt[, list( wm= weighted.mean( nbcd, n)), by= "cell,nlcd,gap"]
+  
+  wmCt <-
+    cast(
+      data= wm,
+      formula= cell ~ gap + nlcd,
+      ## fun.aggregate= sum,
+      ## margins= "grand_col",
+      value= "wm" )
+  
+  write.csv(
+    format.df(
+      wmCt,
+      cdec= c( 0, rep( 1, ncol( wmCt) - 1)),
+      numeric.dollar= FALSE,
+      na.blank= TRUE),
+    row.names= FALSE,
+    file= "nbcdFiaAldb.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd_nbcd.zip", "fracscUSA.csv")
+  zip( "pad-us_nlcd_nbcd.zip", "nbcdFiaAldb.csv")
+#+end_src
+
+*** TODO figure out where null values in NBCD are coming from
