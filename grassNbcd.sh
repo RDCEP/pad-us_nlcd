@@ -14,25 +14,29 @@ g.gisenv set=LOCATION_NAME=cUSA
 g.gisenv set=MAPSET=PERMANENT
 eval $(g.gisenv)
 
-GRASS_MESSAGE_FORMAT=plain r.in.gdal --overwrite input=nbcdWarped.vrt output=nbcd2000
-# r.null map=nbcd2000 null=0
+export GRASS_MESSAGE_FORMAT=plain 
+r.in.gdal --overwrite input=nbcdWarped.vrt output=nbcd2000
+r.in.gdal --overwrite input=cusaStatesAea.img output=states
+r.in.gdal --overwrite input=cusaCountiesAea.img output=counties
+r.in.gdal --overwrite input=nbcdZones.img output=zones
 
 g.region rast=nbcd2000
-GRASS_MESSAGE_FORMAT=plain r.mapcalc nbcd2000Zero='if( isnull( nbcd2000), 0, nbcd2000)'
+r.mapcalc nbcd2000Zero='if( isnull( nbcd2000), 0, nbcd2000)'
 
 g.region rast=nlcd2006
-export GRASS_MESSAGE_FORMAT=plain
-# r.mapcalc MASK="if( nlcd2006 > 0, 1, null())"
 r.mask input=nlcd2006 maskcats="1 thru 95"
-# echo grid_5min,nlcd2006,gap,nbcd2000,n > statsNbcd.csv
-# r.stats -Nc input=grid_5min,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcd.csv
+echo grid_5min,nlcd2006,gap,nbcd2000,n > statsNbcd.csv && \
+r.stats -Nc input=grid_5min,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcd.csv 2> statsNbcd.err &
 
-# this causes integer overflow
-# r.mapcalc gridNlcdGap="grid_5min*1000 + nlcd2006*10 + if( isnull( gap), 0, gap)"
-# r.average --overwrite cover=nbcd2000Zero base=gridGap output=gridNlcdGapAldb
-# r.stats -A input=grid_5min,nlcd2006,gap,gridNlcdGap
+echo state,nlcd2006,gap,nbcd2000,n > statsNbcdState.csv && \
+r.stats -Nc input=states,counties,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdState.csv 2> statsNbcdState.err &
 
-r.stats -A input=grid_5min,nlcd2006,gap,nbcd2000Zero
+echo state,county,nlcd2006,gap,nbcd2000,n > statsNbcdCounty.csv && \
+r.stats -Nc input=states,counties,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdCounty.csv 2> statsNbcdCounty.err &
+
+echo zone,nlcd2006,gap,nbcd2000,n > statsNbcdZone.csv && \
+r.stats -Nc input=zones,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdZone.csv 2> statsNbcdZone.err &
+
 r.mask -r
 
 # run GRASS' cleanup routine

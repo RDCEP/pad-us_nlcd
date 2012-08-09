@@ -528,14 +528,6 @@ the Makefile.
   dt <- data.table( stats)
   setkey( dt, cell, nlcd, gap)
   
-  ## wm <-
-  ##     ddply(
-  ##       .data= idata.frame( stats),
-  ##       .variables= .(cell, nlcd, gap),
-  ##       .fun= function( df) with( df, weighted.mean( nbcd, n)),
-  ##       .progress= "text",
-  ##       .parallel= TRUE)
-  
   wm <- dt[, list( wm= weighted.mean( nbcd, n)), by= "cell,nlcd,gap"]
   
   wmCt <-
@@ -558,6 +550,115 @@ the Makefile.
   
   zip( "pad-us_nlcd_nbcd.zip", "fracscUSA.csv")
   zip( "pad-us_nlcd_nbcd.zip", "nbcdFiaAldb.csv")
+  
+  
+  aggregateNbcd <-
+    function( csvFile, ...) {
+      stats <-
+        read.csv(
+          csvFile,
+          na.strings= "*",
+          header= TRUE,
+          ...)
+      stats <-
+        within(
+          stats,
+          { levels( gap) <- c( levels( gap), "0")
+            gap[ is.na( gap)] <- "0"
+            gap <- combine_factor( gap, c(0,1,1,1,0))
+            levels( gap) <- c( "no", "yes")
+            aldb[ is.na( aldb)] <- 0
+          })
+      dt <- data.table( stats)
+      keycols <-
+        colnames(stats)[ !colnames(stats)
+                        %in% c( "aldb", "n")]
+      setkeyv( dt, keycols)
+      dt[, list( aldb= weighted.mean( aldb, n),
+                ha= sum(n) * 30^2 / 10^4),
+         by= keycols]
+    }
+  
+  translateZone <-
+    function( grassZone) {}
+      
+  nbcdZone <-
+    aggregateNbcd(
+      "statsNbcdZone.csv",
+      col.names= c( "zone", "nlcd", "gap",
+        "aldb", "n"),
+      colClasses= c( "character", "character", "factor",
+        "numeric", "numeric"))
+  
+  zoneAreas <-
+    nbcdZone[, list( totHa= sum(ha)), by= "zone"]
+  nbcdZone <-
+    nbcdZone[ zoneAreas][, frac:=ha/totHa]
+  
+  nbcdZoneAldb <- 
+      data.table(
+        cast(
+          data= nbcdZone,
+          formula= zone ~ gap + nlcd,
+          value= "aldb",
+          subset= !is.na( aldb)),
+        key= "zone")
+  
+  nbcdZoneAldbMeans <- 
+    data.table(
+      cast(
+        data=
+        nbcdZone[, list( aldbAve= weighted.mean( aldb, ha)),
+                 by= c( "zone", "gap")],
+        formula= zone ~ gap,
+        value= "aldbAve",
+        subset= !is.na( aldbAve)),
+      key= "zone")
+  
+  nbcdZoneAldb <-
+    nbcdZoneAldb[ nbcdZoneAldbMeans]
+  
+  write.csv(
+    nbcdZoneAldb,
+    "nbcdZoneAldb.csv",
+    row.names= FALSE,
+    na= "")
+  
+  ## how do I set options temporarily?
+  ## local() has no effect
+  
+  local( {
+    options(useFancyQuotes = FALSE)
+    cat(
+      sapply(
+        nbcdZoneAldb,
+        function( x) {
+          dQuote(
+            ifelse(
+              class(x) == "character",
+              "String(3)", "Real(5.1)"))
+        }),
+      sep= ",",
+      file= "nbcdZoneAldb.csvt")
+  })
+  
+  nbcdZoneHa <- 
+      cast(
+        data= nbcdZone,
+        formula= zone ~ gap + nlcd,
+        value= "ha")
+  
+  
+  write.csv(
+    format.df(
+      wmCt,
+      cdec= c( 0, rep( 1, ncol( wmCt) - 1)),
+      numeric.dollar= FALSE,
+      na.blank= TRUE),
+    row.names= FALSE,
+    file= "nbcdFiaAldb.csv",
+    quote= FALSE)
+  
 #+end_src
 
 *** TODO figure out where null values in NBCD are coming from
