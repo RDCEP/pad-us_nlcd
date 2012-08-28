@@ -28,8 +28,8 @@ r.mask input=nlcd2006 maskcats="1 thru 95"
 echo grid_5min,nlcd2006,gap,nbcd2000,n > statsNbcd.csv && \
 r.stats -Nc input=grid_5min,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcd.csv 2> statsNbcd.err &
 
-echo state,nlcd2006,gap,nbcd2000,n > statsNbcdState.csv && \
-r.stats -Nc input=states,counties,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdState.csv 2> statsNbcdState.err &
+# echo state,nlcd2006,gap,nbcd2000,n > statsNbcdState.csv && \
+# r.stats -Nc input=states,counties,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdState.csv 2> statsNbcdState.err &
 
 echo state,county,nlcd2006,gap,nbcd2000,n > statsNbcdCounty.csv && \
 r.stats -Nc input=states,counties,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdCounty.csv 2> statsNbcdCounty.err &

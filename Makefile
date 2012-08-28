@@ -35,25 +35,26 @@ nbcd: grasscUSA
 counties:
 	wget -nc -P shp ftp://ftp2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_us_county10.zip
 	unzip -n -d shp shp/tl_2010_us_county10.zip
-# 	ogr2ogr -overwrite \
-# -sql 'select 100000 + cast( GEOID10 as integer) as fips from tl_2010_us_county10' \
-# -clipdst -2493045 177285 2342655 3310005 \
-# -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
-# shp/cusaCountiesAea.shp shp/tl_2010_us_county10.shp
 	ogr2ogr -overwrite -progress \
--select STATEFP10,COUNTYFP10 \
+-select STATEFP10,COUNTYFP10,GEOID10 \
 -clipdst -2493045 177285 2342655 3310005 \
 -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
 shp/cusaCountiesAea.shp shp/tl_2010_us_county10.shp
-# 	gdal_rasterize -at -tr 30 30 -co "COMPRESSED=YES" \
-# -l cusaCountiesAea -a_nodata 0 -a fips -ot UInt32 -of HFA \
-# shp/cusaCountiesAea.shp cusaCountiesAea.img
 	gdal_rasterize -at -tr 30 30 -co "COMPRESSED=YES" \
 -l cusaCountiesAea -a_nodata 0 -a STATEFP10 -ot Byte -of HFA \
 shp/cusaCountiesAea.shp cusaStatesAea.img
 	gdal_rasterize -at -tr 30 30 -co "COMPRESSED=YES" \
 -l cusaCountiesAea -a_nodata 0 -a COUNTYFP10 -ot UInt16 -of HFA \
 shp/cusaCountiesAea.shp cusaCountiesAea.img
+
+states:
+	wget -nc -P shp ftp://ftp2.census.gov/geo/tiger/TIGER2010/STATE/2010/tl_2010_us_state10.zip
+	unzip -n -d shp shp/tl_2010_us_state10.zip
+	ogr2ogr -overwrite -progress \
+-select STATEFP10,GEOID10 \
+-clipdst -2493045 177285 2342655 3310005 \
+-t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
+shp/cusaStatesAea.shp shp/tl_2010_us_state10.shp
 
 nbcdZones: # nbcdZones.R
 	ogr2ogr -overwrite \
@@ -65,8 +66,14 @@ shp/nbcdZones.shp nbcd/shp/mapping_zone_shapefile.shp
 -l nbcdZones -a_nodata 0 -a zoneId -ot UInt16 -of HFA \
 shp/nbcdZones.shp nbcdZones.img
 
-nbcdZoneAldb.shp: nbcdZoneAldb.csv
-	ogr2ogr -overwrite -sql "select zone_id2,zone,no_11,no_12,no_21,no_22,no_23,no_24,no_31,no_41,no_42,no_43,no_52,no_71,no_81,no_82,no_90,no_95,yes_11,yes_12,yes_21,yes_22,yes_23,yes_24,yes_31,yes_41,yes_42,yes_43,yes_52,yes_71,yes_81,yes_82,yes_90,yes_95,no,yes from nbcdZones a left join 'nbcdZoneAldb.csv'.nbcdZoneAldb b on a.zone = b.zone" shp/nbcdZoneAldb.shp shp/nbcdZones.shp
+shp/nbcdZoneAldb.shp: nbcdZoneAldb.csv
+	ogr2ogr -overwrite -sql "select zone_id2,zone,no_11,no_12,no_21,no_22,no_23,no_24,no_31,no_41,no_42,no_43,no_52,no_71,no_81,no_82,no_90,no_95,yes_11,yes_12,yes_21,yes_22,yes_23,yes_24,yes_31,yes_41,yes_42,yes_43,yes_52,yes_71,yes_81,yes_82,yes_90,yes_95,no,yes from nbcdZones a left join 'nbcdZoneAldb.csv'.nbcdZoneAldb b on a.zone = b.zone" $@ shp/nbcdZones.shp
+
+shp/nbcdCountyAldb.shp: # nbcdCountyAldb.csv nbcdCountyAldb.csvt
+	ogr2ogr -overwrite -progress -sql "select fips,no_11,no_12,no_21,no_22,no_23,no_24,no_31,no_41,no_42,no_43,no_52,no_71,no_81,no_82,no_90,no_95,yes_11,yes_12,yes_21,yes_22,yes_23,yes_24,yes_31,yes_41,yes_42,yes_43,yes_52,yes_71,yes_81,yes_82,yes_90,yes_95,no,yes from cusaCountiesAea a left join 'nbcdCountyAldb.csv'.nbcdCountyAldb b on a.GEOID10 = b.fips" $@ shp/cusaCountiesAea.shp
+
+shp/nbcdStateAldb.shp: # nbcdStateAldb.csv nbcdStateAldb.csvt
+	ogr2ogr -overwrite -progress -sql "select fips,no_11,no_12,no_21,no_22,no_23,no_24,no_31,no_41,no_42,no_43,no_52,no_71,no_81,no_82,no_90,no_95,yes_11,yes_12,yes_21,yes_22,yes_23,yes_24,yes_31,yes_41,yes_42,yes_43,yes_52,yes_71,yes_81,yes_82,yes_90,yes_95,no,yes from cusaStatesAea a left join 'nbcdStateAldb.csv'.nbcdStateAldb b on a.GEOID10 = b.fips" $@ shp/cusaStatesAea.shp
 
 small:
 	find nbcd/atlas.whrc.org/NBCD2000/ -not -name "*.tgz" -type f -delete

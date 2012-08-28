@@ -579,9 +579,6 @@ the Makefile.
          by= keycols]
     }
   
-  translateZone <-
-    function( grassZone) {}
-      
   nbcdZone <-
     aggregateNbcd(
       "statsNbcdZone.csv",
@@ -624,6 +621,8 @@ the Makefile.
     row.names= FALSE,
     na= "")
   
+  zip( "pad-us_nlcd_nbcd.zip", "nbcdZoneAldb.csv")
+  
   ## how do I set options temporarily?
   ## local() has no effect
   
@@ -649,16 +648,162 @@ the Makefile.
         value= "ha")
   
   
-  write.csv(
-    format.df(
-      wmCt,
-      cdec= c( 0, rep( 1, ncol( wmCt) - 1)),
-      numeric.dollar= FALSE,
-      na.blank= TRUE),
-    row.names= FALSE,
-    file= "nbcdFiaAldb.csv",
-    quote= FALSE)
-  
 #+end_src
 
 *** TODO figure out where null values in NBCD are coming from
+*** repeat for counties
+
+#+begin_src R
+  nbcdCounty <-
+    within(
+      aggregateNbcd(
+        "statsNbcdCounty.csv",
+        col.names= c(
+          "state", "county", "nlcd", 
+          "gap", "aldb", "n"),
+        colClasses= c(
+          "character", "character", "character",
+          "factor", "numeric", "numeric")),
+      fips <-
+        factor(
+          sprintf(
+            "%02d%03d",
+            as.numeric( state),
+            as.numeric( county))))
+  
+  setkey( nbcdCounty,fips)
+  
+  countyAreas <-
+    nbcdCounty[, list( totHa= sum(ha)), by= "fips"]
+  nbcdCounty <-
+    nbcdCounty[ countyAreas][, frac:=ha/totHa]
+  
+  nbcdCountyAldb <- 
+      data.table(
+        cast(
+          data= nbcdCounty,
+          formula= fips ~ gap + nlcd,
+          value= "aldb",
+          subset= !is.na( aldb)),
+        key= "fips")
+  
+  nbcdCountyAldbMeans <- 
+    data.table(
+      cast(
+        data=
+        nbcdCounty[, list( aldbAve= weighted.mean( aldb, ha)),
+                 by= c( "fips", "gap")],
+        formula= fips ~ gap,
+        value= "aldbAve",
+        subset= !is.na( aldbAve)),
+      key= "fips")
+  
+  nbcdCountyAldb <-
+    nbcdCountyAldb[ nbcdCountyAldbMeans]
+  
+  write.csv(
+    nbcdCountyAldb,
+    "nbcdCountyAldb.csv",
+    row.names= FALSE,
+    na= "")
+  
+  zip( "pad-us_nlcd_nbcd.zip", "nbcdCountyAldb.csv")
+  
+  options(useFancyQuotes = FALSE)
+  cat(
+    sapply(
+      nbcdCountyAldb,
+      function( x) {
+        dQuote(
+          ifelse(
+            class(x) == "factor",
+            "String(5)", "Real(5.1)"))
+      }),
+    sep= ",",
+    file= "nbcdCountyAldb.csvt")
+  
+#+end_src
+
+
+
+*** repeat for states
+
+#+begin_src R
+  statsNbcdCounty <-
+    within(
+      aggregateNbcd(
+        "statsNbcdCounty.csv",
+        col.names= c(
+          "state", "county", "nlcd", 
+          "gap", "aldb", "n"),
+        colClasses= c(
+          "character", "character", "character",
+          "factor", "numeric", "numeric")),
+      fips <-
+        factor(
+          sprintf(
+            "%02d",
+            as.numeric( state))))
+  setkey( statsNbcdCounty, fips, nlcd, gap)
+  
+  statsNbcdState <-
+    statsNbcdCounty[ , list(
+                        aldb= weighted.mean( aldb, ha),
+                        ha= sum( ha)),
+                   by= c( "fips", "nlcd", "gap")]
+  setkey( statsNbcdState, fips, nlcd, gap)
+  
+  
+  stateAreas <-
+    statsNbcdState[ , list(
+                        totHa= sum(ha)),
+                   by= "fips"]
+  statsNbcdState <-
+    statsNbcdState[ stateAreas][, frac:=ha/totHa]
+  
+  nbcdStateAldb <- 
+      data.table(
+        cast(
+          data= statsNbcdState,
+          formula= fips ~ gap + nlcd,
+          value= "aldb",
+          subset= !is.na( aldb)),
+        key= "fips")
+  
+  nbcdStateAldbMeans <- 
+    data.table(
+      cast(
+        data=
+        statsNbcdState[, list( aldbAve= weighted.mean( aldb, ha)),
+                 by= c( "fips", "gap")],
+        formula= fips ~ gap,
+        value= "aldbAve",
+        subset= !is.na( aldbAve)),
+      key= "fips")
+  
+  nbcdStateAldb <-
+    nbcdStateAldb[ nbcdStateAldbMeans]
+  
+  write.csv(
+    nbcdStateAldb,
+    "nbcdStateAldb.csv",
+    row.names= FALSE,
+    na= "")
+  
+  zip( "pad-us_nlcd_nbcd.zip", "nbcdStateAldb.csv")
+  
+  options(useFancyQuotes = FALSE)
+  cat(
+    sapply(
+      nbcdStateAldb,
+      function( x) {
+        dQuote(
+          ifelse(
+            class(x) == "factor",
+            "String(2)", "Real(5.1)"))
+      }),
+    sep= ",",
+    file= "nbcdStateAldb.csvt")
+  
+  
+#+end_src
