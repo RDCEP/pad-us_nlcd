@@ -72,9 +72,6 @@ shp/nbcdZoneAldb.shp: nbcdZoneAldb.csv
 shp/nbcdCountyAldb.shp: # nbcdCountyAldb.csv nbcdCountyAldb.csvt
 	ogr2ogr -overwrite -progress -sql "select fips,no_11,no_12,no_21,no_22,no_23,no_24,no_31,no_41,no_42,no_43,no_52,no_71,no_81,no_82,no_90,no_95,yes_11,yes_12,yes_21,yes_22,yes_23,yes_24,yes_31,yes_41,yes_42,yes_43,yes_52,yes_71,yes_81,yes_82,yes_90,yes_95,no,yes from cusaCountiesAea a left join 'nbcdCountyAldb.csv'.nbcdCountyAldb b on a.GEOID10 = b.fips" $@ shp/cusaCountiesAea.shp
 
-shp/nbcdStateAldb.shp: # nbcdStateAldb.csv nbcdStateAldb.csvt
-	ogr2ogr -overwrite -progress -sql "select fips,no_11,no_12,no_21,no_22,no_23,no_24,no_31,no_41,no_42,no_43,no_52,no_71,no_81,no_82,no_90,no_95,yes_11,yes_12,yes_21,yes_22,yes_23,yes_24,yes_31,yes_41,yes_42,yes_43,yes_52,yes_71,yes_81,yes_82,yes_90,yes_95,no,yes from cusaStatesAea a left join 'nbcdStateAldb.csv'.nbcdStateAldb b on a.GEOID10 = b.fips" $@ shp/cusaStatesAea.shp
-
 small:
 	find nbcd/atlas.whrc.org/NBCD2000/ -not -name "*.tgz" -type f -delete
 	find nbcd/atlas.whrc.org/gfiske/ -not -name "*.zip" -type f -delete
