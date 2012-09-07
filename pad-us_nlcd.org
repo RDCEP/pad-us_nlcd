@@ -502,12 +502,13 @@ the Makefile.
 
 ** generate NBCD statistics
 
+*** by 5' grid cells
+
 #+NAME: writeNbcdStats
 #+begin_src R 
   library( reshape)
   library( Hmisc)
   library( data.table)
-  
   
   stats <-
     read.csv( "statsNbcd.csv",
@@ -551,7 +552,16 @@ the Makefile.
   zip( "pad-us_nlcd_nbcd.zip", "fracscUSA.csv")
   zip( "pad-us_nlcd_nbcd.zip", "nbcdFiaAldb.csv")
   
+#+end_src
   
+  
+*** TODO convert NAs to zeros for \*Fr and \*Ha in CSVs and SHPs
+*** TODO trim spaces in char data frames before writing CSVs
+
+*** by NBCD mapping zones
+  
+#+begin_src R
+    
   aggregateNbcd <-
     function( csvFile, ...) {
       stats <-
@@ -650,11 +660,19 @@ the Makefile.
   
 #+end_src
 
-*** TODO figure out where null values in NBCD are coming from
+**** TODO figure out where null values in NBCD are coming from
+
 *** repeat for counties
 
 #+begin_src R
-  nbcdCounty <-
+  library( reshape)
+  library( Hmisc)
+  library( data.table)
+  library( stringr)
+  
+  ## define aggregateNbcd()
+  
+  statsNbcdCounty <-
     within(
       aggregateNbcd(
         "statsNbcdCounty.csv",
@@ -671,56 +689,200 @@ the Makefile.
             as.numeric( state),
             as.numeric( county))))
   
-  setkey( nbcdCounty,fips)
+  setkey( statsNbcdCounty, fips, nlcd, gap)
+  
+  
+  ## statsNbcdCounty <- 
+  ##   statsNbcdCounty[
+  ##     statsNbcdCounty[,
+  ##       list( totHa= sum( ha)),
+  ##       by= "fips"]][, frac:=ha/totHa]
   
   countyAreas <-
-    nbcdCounty[, list( totHa= sum(ha)), by= "fips"]
-  nbcdCounty <-
-    nbcdCounty[ countyAreas][, frac:=ha/totHa]
+    statsNbcdCounty[, list( totHa= sum(ha)),
+                    by= "fips"]
+  statsNbcdCounty <-
+    statsNbcdCounty[ countyAreas][, frac:=ha/totHa]
   
   nbcdCountyAldb <- 
       data.table(
         cast(
-          data= nbcdCounty,
+          data= statsNbcdCounty,
           formula= fips ~ gap + nlcd,
           value= "aldb",
           subset= !is.na( aldb)),
         key= "fips")
   
+  setnames(
+    nbcdCountyAldb,
+    colnames(nbcdCountyAldb),
+    str_replace( colnames(nbcdCountyAldb), "_", ""))
+  
   nbcdCountyAldbMeans <- 
     data.table(
       cast(
         data=
-        nbcdCounty[, list( aldbAve= weighted.mean( aldb, ha)),
+        statsNbcdCounty[, list( aldbAve= weighted.mean( aldb, ha)),
                  by= c( "fips", "gap")],
         formula= fips ~ gap,
         value= "aldbAve",
         subset= !is.na( aldbAve)),
       key= "fips")
   
-  nbcdCountyAldb <-
-    nbcdCountyAldb[ nbcdCountyAldbMeans]
+  setnames(
+    nbcdCountyAldbMeans,
+    colnames( nbcdCountyAldbMeans)[ -1],
+    sprintf(
+      "%sAll",
+      colnames( nbcdCountyAldbMeans)[ -1]))
+  
+  nbcdCountyGapFrac <-
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        formula= fips ~ gap,
+        value= "frac",
+        fun.aggregate= sum,
+        subset= !is.na( aldb)),
+      key= "fips")
+  
+  setnames(
+    nbcdCountyGapFrac,
+    colnames( nbcdCountyGapFrac)[ -1],
+    sprintf(
+      "%sAllFr",
+      str_replace(
+        colnames( nbcdCountyGapFrac)[ -1],
+        "_", "")))
+  
+  nbcdCountyGapHa <-
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        formula= fips ~ gap,
+        value= "ha",
+        fun.aggregate= sum,
+        subset= !is.na( aldb)),
+      key= "fips")
+  
+  setnames(
+    nbcdCountyGapHa,
+    colnames( nbcdCountyGapHa)[ -1],
+    sprintf(
+      "%sAllHa",
+      str_replace(
+        colnames( nbcdCountyGapHa)[ -1],
+        "_", "")))
+  
+   nbcdCountyFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        formula= fips ~ gap + nlcd,
+        value= "frac",
+        subset= !is.na( aldb)),
+      key= "fips")
+  
+  setnames(
+    nbcdCountyFrac,
+    colnames( nbcdCountyFrac)[ -1],
+    sprintf(
+      "%sFr",
+      str_replace(
+        colnames( nbcdCountyFrac)[ -1],
+        "_", "")))
+  
+  nbcdCountyHa <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        formula= fips ~ gap + nlcd,
+        value= "ha",
+        subset= !is.na( aldb)),
+      key= "fips")
+  
+  setnames(
+    nbcdCountyHa,
+    colnames( nbcdCountyHa)[ -1],
+    sprintf(
+      "%sHa",
+      str_replace(
+        colnames( nbcdCountyHa)[ -1],
+        "_", "")))
+   
+  nbcdCounty <- nbcdCountyAldb[ nbcdCountyAldbMeans]
+  nbcdCounty <- nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
+  nbcdCounty <- nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
+  setcolorder( nbcdCounty, order( colnames( nbcdCounty)))
+  
+  ## write.csv(
+  ##    nbcdCounty,
+  ##    "nbcdCounty.csv",
+  ##    row.names= FALSE,
+  ##    na= "")
+  
+  nbcdCountyChar <-
+    format.df(
+      nbcdCounty,
+      cdec= sapply(
+        colnames( nbcdCounty),
+        function( x)
+        ifelse(
+          x == "fips", 0,
+          ifelse(
+            str_detect( x, "Ha$"), 1,
+            ifelse(
+              str_detect( x, "Fr$"), 3,
+              1)))),
+      numeric.dollar= FALSE,
+      na.blank= TRUE)
   
   write.csv(
-    nbcdCountyAldb,
-    "nbcdCountyAldb.csv",
+    nbcdCountyChar,
     row.names= FALSE,
-    na= "")
+    file= "nbcdCounty.csv",
+    quote= FALSE)
   
-  zip( "pad-us_nlcd_nbcd.zip", "nbcdCountyAldb.csv")
-  
+  zip( "pad-us_nlcd_nbcd.zip", "nbcdCounty.csv")
+   
   options(useFancyQuotes = FALSE)
-  cat(
-    sapply(
-      nbcdCountyAldb,
-      function( x) {
-        dQuote(
-          ifelse(
-            class(x) == "factor",
-            "String(5)", "Real(5.1)"))
-      }),
-    sep= ",",
-    file= "nbcdCountyAldb.csvt")
+   cat(
+     sapply(
+       colnames( nbcdCounty),
+       function( x) {
+         dQuote(
+           ifelse(
+             x == "fips", "String(5)",
+             ifelse(
+               str_detect( x, "Ha$"),
+               "Real(10.1)",
+               ifelse(
+                 str_detect( x, "Fr$"),
+                 "Real(5.3)",
+                 "Real(5.1)"))))
+       }),
+     sep= ",",
+     file= "nbcdCounty.csvt")
+  
+  ogr2ogr <-
+    paste(
+      "ogr2ogr -overwrite -progress -sql",
+      sprintf(
+        "\"select %s from cusaCountiesAea a",
+        paste( colnames( nbcdCounty), collapse= ",")),
+      "left join 'nbcdCounty.csv'.nbcdCounty b",
+      "on a.GEOID10 = b.fips\"",
+      "shp/nbcdCounty.shp shp/cusaCountiesAea.shp")
+  
+  system( ogr2ogr)
+  
+  zip(
+    "pad-us_nlcd_nbcd.zip",
+    list.files(
+      path= "shp",
+      pattern= "^nbcdCounty\\.",
+      full.names= TRUE))
+  
   
 #+end_src
 
@@ -831,30 +993,6 @@ the Makefile.
         colnames( nbcdStateGapHa)[ -1],
         "_", "")))
   
-   ## nbcdStateAldb <-
-   ##   nbcdStateAldbMeans[ nbcdStateAldb]
-   
-   ## write.csv(
-   ##   nbcdStateAldb,
-   ##   "nbcdStateAldb.csv",
-   ##   row.names= FALSE,
-   ##   na= "")
-   
-   ## zip( "pad-us_nlcd_nbcd.zip", "nbcdStateAldb.csv")
-   
-   ## options(useFancyQuotes = FALSE)
-   ## cat(
-   ##   sapply(
-   ##     nbcdStateAldb,
-   ##     function( x) {
-   ##       dQuote(
-   ##         ifelse(
-   ##           class(x) == "factor",
-   ##           "String(2)", "Real(5.1)"))
-   ##     }),
-   ##   sep= ",",
-   ##   file= "nbcdStateAldb.csvt")
-   
    nbcdStateFrac <- 
     data.table(
       cast(
