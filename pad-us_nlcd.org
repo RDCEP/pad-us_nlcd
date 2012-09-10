@@ -509,7 +509,7 @@ the Makefile.
   library( reshape)
   library( Hmisc)
   library( data.table)
-  
+
   stats <-
     read.csv( "statsNbcd.csv",
              na.strings= "*",
@@ -554,14 +554,16 @@ the Makefile.
   
 #+end_src
   
-  
+
 *** TODO convert NAs to zeros for \*Fr and \*Ha in CSVs and SHPs
 *** TODO trim spaces in char data frames before writing CSVs
 
-*** by NBCD mapping zones
-  
+*** aggregate r.stats output
+
+This functions loads r.stats output from GRASS for any of the
+following aggregations based on vector maps.
+
 #+begin_src R
-    
   aggregateNbcd <-
     function( csvFile, ...) {
       stats <-
@@ -589,73 +591,211 @@ the Makefile.
          by= keycols]
     }
   
-  nbcdZone <-
+  
+#+end_src
+
+*** by NBCD mapping zones
+  
+#+begin_src R
+  library( reshape)
+  library( Hmisc)
+  library( data.table)
+  library( stringr)
+  
+  ## define aggregateNbcd()
+  
+  statsNbcdZone <-
     aggregateNbcd(
       "statsNbcdZone.csv",
-      col.names= c( "zone", "nlcd", "gap",
+      col.names= c(
+        "zone", "nlcd", "gap",
         "aldb", "n"),
-      colClasses= c( "character", "character", "factor",
+      colClasses= c(
+        "character", "character", "factor",
         "numeric", "numeric"))
   
   zoneAreas <-
-    nbcdZone[, list( totHa= sum(ha)), by= "zone"]
-  nbcdZone <-
-    nbcdZone[ zoneAreas][, frac:=ha/totHa]
+    statsNbcdZone[, list( totHa= sum(ha)),
+                  by= "zone"]
+  statsNbcdZone <-
+    statsNbcdZone[ zoneAreas][, frac:=ha/totHa]
   
   nbcdZoneAldb <- 
       data.table(
         cast(
-          data= nbcdZone,
+          data= statsNbcdZone,
           formula= zone ~ gap + nlcd,
           value= "aldb",
           subset= !is.na( aldb)),
         key= "zone")
   
+  setnames(
+    nbcdZoneAldb,
+    colnames(nbcdZoneAldb),
+    str_replace( colnames(nbcdZoneAldb), "_", ""))
+  
   nbcdZoneAldbMeans <- 
     data.table(
       cast(
         data=
-        nbcdZone[, list( aldbAve= weighted.mean( aldb, ha)),
+        statsNbcdZone[, list( aldbAve= weighted.mean( aldb, ha)),
                  by= c( "zone", "gap")],
         formula= zone ~ gap,
         value= "aldbAve",
         subset= !is.na( aldbAve)),
       key= "zone")
   
-  nbcdZoneAldb <-
-    nbcdZoneAldb[ nbcdZoneAldbMeans]
+  setnames(
+    nbcdCountyAldbMeans,
+    colnames( nbcdCountyAldbMeans)[ -1],
+    sprintf(
+      "%sAll",
+      colnames( nbcdCountyAldbMeans)[ -1]))
   
-  write.csv(
-    nbcdZoneAldb,
-    "nbcdZoneAldb.csv",
-    row.names= FALSE,
-    na= "")
+  nbcdZoneGapFrac <-
+    data.table(
+      cast(
+        data= statsNbcdZone,
+        formula= zone ~ gap,
+        value= "frac",
+        fun.aggregate= sum,
+        subset= !is.na( aldb)),
+      key= "zone")
   
-  zip( "pad-us_nlcd_nbcd.zip", "nbcdZoneAldb.csv")
+  setnames(
+    nbcdZoneGapFrac,
+    colnames( nbcdZoneGapFrac)[ -1],
+    sprintf(
+      "%sAllFr",
+      str_replace(
+        colnames( nbcdZoneGapFrac)[ -1],
+        "_", "")))
   
-  ## how do I set options temporarily?
-  ## local() has no effect
+  nbcdZoneGapHa <-
+    data.table(
+      cast(
+        data= statsNbcdZone,
+        formula= zone ~ gap,
+        value= "ha",
+        fun.aggregate= sum,
+        subset= !is.na( aldb)),
+      key= "zone")
   
-  local( {
-    options(useFancyQuotes = FALSE)
-    cat(
-      sapply(
-        nbcdZoneAldb,
-        function( x) {
-          dQuote(
-            ifelse(
-              class(x) == "character",
-              "String(3)", "Real(5.1)"))
-        }),
-      sep= ",",
-      file= "nbcdZoneAldb.csvt")
-  })
+  setnames(
+    nbcdZoneGapHa,
+    colnames( nbcdZoneGapHa)[ -1],
+    sprintf(
+      "%sAllHa",
+      str_replace(
+        colnames( nbcdZoneGapHa)[ -1],
+        "_", "")))
+  
+   nbcdZoneFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdZone,
+        formula= zone ~ gap + nlcd,
+        value= "frac",
+        subset= !is.na( aldb)),
+      key= "zone")
+  
+  setnames(
+    nbcdZoneFrac,
+    colnames( nbcdZoneFrac)[ -1],
+    sprintf(
+      "%sFr",
+      str_replace(
+        colnames( nbcdZoneFrac)[ -1],
+        "_", "")))
   
   nbcdZoneHa <- 
+    data.table(
       cast(
-        data= nbcdZone,
+        data= statsNbcdZone,
         formula= zone ~ gap + nlcd,
-        value= "ha")
+        value= "ha",
+        subset= !is.na( aldb)),
+      key= "zone")
+  
+  setnames(
+    nbcdZoneHa,
+    colnames( nbcdZoneHa)[ -1],
+    sprintf(
+      "%sHa",
+      str_replace(
+        colnames( nbcdZoneHa)[ -1],
+        "_", "")))
+   
+  nbcdZone <- nbcdZoneAldb[ nbcdZoneAldbMeans]
+  nbcdZone <- nbcdZone[ nbcdZoneGapFrac][ nbcdZoneGapHa]
+  nbcdZone <- nbcdZone[ nbcdZoneFrac][ nbcdZoneHa]
+  setcolorder(
+    nbcdZone,
+    c( 1,
+      order( colnames( nbcdZone)[ -1]) +1))
+  
+  nbcdZoneChar <-
+    str_trim(
+      format.df(
+        nbcdZone,
+        cdec= sapply(
+          colnames( nbcdZone),
+          function( x)
+          ifelse(
+            x == "zone", 0,
+            ifelse(
+              str_detect( x, "Ha$"), 1,
+              ifelse(
+                str_detect( x, "Fr$"), 3,
+                1)))),
+        numeric.dollar= FALSE,
+        na.blank= TRUE))
+  
+  write.csv(
+    nbcdZoneChar,
+    row.names= FALSE,
+    file= "nbcdZone.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd_nbcd.zip", "nbcdZone.csv")
+   
+  options(useFancyQuotes = FALSE)
+   cat(
+     sapply(
+       colnames( nbcdZone),
+       function( x) {
+         dQuote(
+           ifelse(
+             x == "zone", "String(3)",
+             ifelse(
+               str_detect( x, "Ha$"),
+               "Real(10.1)",
+               ifelse(
+                 str_detect( x, "Fr$"),
+                 "Real(5.3)",
+                 "Real(5.1)"))))
+       }),
+     sep= ",",
+     file= "nbcdZone.csvt")
+  
+  ogr2ogr <-
+    paste(
+      "ogr2ogr -overwrite -progress -sql",
+      sprintf(
+        "\"select %s from nbcdZones a",
+        paste( colnames( nbcdZone), collapse= ",")),
+      "left join 'nbcdZone.csv'.nbcdZone b",
+      "on a.zone = b.zone\"",
+      "shp/nbcdZone.shp shp/nbcdZones.shp")
+  
+  system( ogr2ogr)
+  
+  zip(
+    "pad-us_nlcd_nbcd.zip",
+    list.files(
+      path= "shp",
+      pattern= "^nbcdZone\\.",
+      full.names= TRUE))
   
   
 #+end_src
