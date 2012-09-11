@@ -955,27 +955,22 @@ following aggregations based on vector maps.
   nbcdCounty <- nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
   setcolorder( nbcdCounty, order( colnames( nbcdCounty)))
   
-  ## write.csv(
-  ##    nbcdCounty,
-  ##    "nbcdCounty.csv",
-  ##    row.names= FALSE,
-  ##    na= "")
-  
   nbcdCountyChar <-
-    format.df(
-      nbcdCounty,
-      cdec= sapply(
-        colnames( nbcdCounty),
-        function( x)
-        ifelse(
-          x == "fips", 0,
+    str_trim(
+      format.df(
+        nbcdCounty,
+        cdec= sapply(
+          colnames( nbcdCounty),
+          function( x)
           ifelse(
-            str_detect( x, "Ha$"), 1,
+            x == "fips", 0,
             ifelse(
-              str_detect( x, "Fr$"), 3,
-              1)))),
-      numeric.dollar= FALSE,
-      na.blank= TRUE)
+              str_detect( x, "Ha$"), 1,
+              ifelse(
+                str_detect( x, "Fr$"), 3,
+                1)))),
+        numeric.dollar= FALSE,
+        na.blank= TRUE))
   
   write.csv(
     nbcdCountyChar,
@@ -1174,28 +1169,23 @@ following aggregations based on vector maps.
   nbcdState <- nbcdState[ nbcdStateFrac][ nbcdStateHa]
   setcolorder( nbcdState, order( colnames( nbcdState)))
   
-   write.csv(
-     nbcdState,
-     "nbcdState.csv",
-     row.names= FALSE,
-     na= "")
-  
   nbcdStateChar <-
-    format.df(
-      nbcdState,
-      cdec= sapply(
-        colnames( nbcdState),
-        function( x) {
-          ifelse(
-            x == "fips", 0,
+    str_trim(
+      format.df(
+        nbcdState,
+        cdec= sapply(
+          colnames( nbcdState),
+          function( x) {
             ifelse(
-              str_detect( x, "Ha$"), 1,
+              x == "fips", 0,
               ifelse(
-                str_detect( x, "Fr$"), 3,
-                1)))
-        }),
-      numeric.dollar= FALSE,
-      na.blank= TRUE)
+                str_detect( x, "Ha$"), 1,
+                ifelse(
+                  str_detect( x, "Fr$"), 3,
+                  1)))
+          }),
+        numeric.dollar= FALSE,
+        na.blank= TRUE))
   
   write.csv(
     nbcdStateChar,
