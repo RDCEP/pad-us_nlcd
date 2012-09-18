@@ -1,9 +1,23 @@
 vpath %.R scripts
+vpath %.tif gdal
+vpath %.img gdal
 
-all: cusa ak pr hi
+.PHONY: cusa ak hi pr small nbcdZones counties nbcd 
 
-cusa: world5min.tif
-	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" -te -2493045 177285 2342655 3310005 -tr 30 30 -co "COMPRESSED=YES" world5min.tif aeaGrid5minCUSA.img
+tangle: pad-us_nlcd.org Makefile
+# 	emacs --batch --file=$< -f org-babel-tangle 2>&1 | grep tangle
+	rsync -arq tangle/ scripts 
+#	chmod u+x scripts/*
+
+scripts/grid5minWorld.R: tangle
+
+gdal/grid5minWorld.tif: scripts/grid5minWorld.R
+	Rscript --vanilla $<
+
+gdal/grid5minAeaCUSA.img: gdal/grid5minWorld.tif
+	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" -te -2493045 177285 2342655 3310005 -tr 30 30 -co "COMPRESSED=YES" $< $@
+
+cusa: gdal/grid5minAeaCUSA.img
 
 ak: world5min.tif
 	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=55 +lat_2=65 +lat_0=50 +lon_0=-154 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" -te -2232345 344805 1494735 2380125 -tr 30 30 -co "COMPRESSED=YES" world5min.tif aeaGrid5minAlaska.img
@@ -13,6 +27,8 @@ pr: world5min.tif
 
 hi: world5min.tif
 	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=8.000000000000002 +lat_2=18 +lat_0=3 +lon_0=-157 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" -te -345945 1753875 237225 2132415 -tr 30 30 -co "COMPRESSED=YES" world5min.tif aeaGrid5minHawaii.img
+
+all: cusa ak pr hi
 
 grass: grassPuertoRico grassHawaii grassAlaska grasscUSA
 
@@ -76,4 +92,3 @@ small:
 	find nbcd/atlas.whrc.org/NBCD2000/ -not -name "*.tgz" -type f -delete
 	find nbcd/atlas.whrc.org/gfiske/ -not -name "*.zip" -type f -delete
 
-.PHONY: small nbcdZones counties nbcd 
