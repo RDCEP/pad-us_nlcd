@@ -26,3 +26,6 @@ You must install P7ZIP on your *nix system in order to unpack the NLCD2006 data.
 Perhaps there is other software that can handle these files, but regular unzip was inadequate.
 
 
+
+* NLCD Categories
+

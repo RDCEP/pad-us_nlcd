@@ -6,7 +6,10 @@ nlcd2006:
 	7za e NLCD2006_landcover_4-20-11_se5.zip
 
 nlcd2001:
-        wget -nc 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcd2001v2&FNAME=NLCD2001_landcover_v2_2-13-11.zip' -O NLCD2001_landcover_v2_2-13-11.zip
+	wget -nc 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcd2001v2&FNAME=NLCD2001_landcover_v2_2-13-11.zip' -O NLCD2001_landcover_v2_2-13-11.zip
+	wget -nc 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcdconus&FNAME=nlcd2001_canopy_mosaic_1-29-08.zip' -O nlcd2001_canopy_mosaic_1-29-08.zip
+	wget -nc 'http://www.mrlc.gov/nlcd01_leg.php'
+	wget -nc 'http://www.mrlc.gov/includes/custom.css'
 
 ak:
 	-wget -nc 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcdak&FNAME=AK_NLCD_2001_land_cover_3-13-08.zip' -O AK_NLCD_2001_land_cover_3-13-08.zip
