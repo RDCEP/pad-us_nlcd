@@ -553,43 +553,117 @@ the Makefile.
 This functions loads r.stats output from GRASS for any of the
 following aggregations based on vector maps.
 
+**** The old way
+
 #+begin_src R
-  aggregateNbcd <-
-    function( csvFile, ...) {
-      stats <-
-        read.csv(
-          csvFile,
-          na.strings= "*",
-          header= TRUE,
-          ...)
-      stats <-
-        within(
-          stats,
-          { levels( gap) <- c( levels( gap), "0")
-            gap[ is.na( gap)] <- "0"
-            gap <- combine_factor( gap, c(0,1,1,1,0))
-            levels( gap) <- c( "no", "yes")
-            aldb[ is.na( aldb)] <- 0
-          })
-      dt <- data.table( stats)
-      keycols <-
-        colnames(stats)[ !colnames(stats)
-                        %in% c( "aldb", "n")]
-      setkeyv( dt, keycols)
-      ## dt[, list( aldb= weighted.mean( aldb, n),
-      ##           ha= sum(n) * 30^2 / 10^4),
-      ##    by= keycols]
-      dt <- dt[, n2 := replace( n, aldb == 0, 0)]
-      dt <- dt[, list( aldb= weighted.mean( aldb, n),
-                      aldb2= weighted.mean( aldb, n2),
-                      n= sum( n),
-                      n2= sum( n2),
-                      ha= sum(n) * 30^2 / 10^4,
-                      ha2= sum(n2) * 30^2 / 10^4),
-               by= keycols]
-      dt
-    }
+  ## aggregateNbcd <-
+  ##   function( csvFile, ...) {
+  ##     stats <-
+  ##       read.csv(
+  ##         csvFile,
+  ##         na.strings= "*",
+  ##         header= TRUE,
+  ##         ...)
+  ##     stats <-
+  ##       within(
+  ##         stats,
+  ##         { levels( gap) <- c( levels( gap), "0")
+  ##           gap[ is.na( gap)] <- "0"
+  ##           gap <- combine_factor( gap, c(0,1,1,1,0))
+  ##           levels( gap) <- c( "no", "yes")
+  ##           aldb[ is.na( aldb)] <- 0
+  ##         })
+  ##     dt <- data.table( stats)
+  ##     keycols <-
+  ##       colnames(stats)[ !colnames(stats)
+  ##                       %in% c( "aldb", "n")]
+  ##     setkeyv( dt, keycols)
+  ##     ## dt[, list( aldb= weighted.mean( aldb, n),
+  ##     ##           ha= sum(n) * 30^2 / 10^4),
+  ##     ##    by= keycols]
+  ##     dt <- dt[, n2 := replace( n, aldb == 0, 0)]
+  ##     dt <- dt[, list( aldb= weighted.mean( aldb, n),
+  ##                     aldb2= weighted.mean( aldb, n2),
+  ##                     n= sum( n),
+  ##                     n2= sum( n2),
+  ##                     ha= sum(n) * 30^2 / 10^4,
+  ##                     ha2= sum(n2) * 30^2 / 10^4),
+  ##              by= keycols]
+  ##     dt
+  ##   }
   
+  
+  ## stats <-
+  ##   read.csv(
+  ##     "statsNbcdCounty.csv",
+  ##     na.strings= "*",
+  ##     header= TRUE,
+  ##     col.names= c(
+  ##       "state", "county", "nlcd", 
+  ##       "gap", "aldb", "n"),
+  ##     colClasses= c(
+  ##       "character", "character", "character",
+  ##       "numeric", "numeric", "numeric"))
+  ## stats <-
+  ##   within( stats, {
+  ##     gap[ is.na( gap)] <- 0
+  ##     gap[ gap == 4] <- 0
+  ##     gap[ gap !=0] <- 1
+  ##     aldb[ is.na( aldb)] <- 0
+  ##     gap <- as.logical( gap) } )
+
+#+end_src
+
+**** The new way
+
+#+begin_src R
+  
+  library( reshape)
+  library( Hmisc)
+  library( data.table)
+  library( stringr)
+  
+  rawCountyStats <-
+    read.csv(
+      "statsNbcdCounty.csv",
+      na.strings= "*",
+      header= TRUE,
+      col.names= c(
+        "state", "county", "nlcd", 
+        "gap", "aldb", "n"),
+      colClasses= c(
+        "character", "character", "character",
+        "numeric", "numeric", "numeric"))
+  
+  rawCountyStats <-
+    within( rawCountyStats, {
+      state[  is.na(  state)] <- 0   
+      county[ is.na( county)] <- 0    
+      state <-
+        str_pad( state,
+                2, pad= "0")
+      county <-
+        str_pad( county,
+                3, pad= "0")
+      gap[ is.na( gap)] <- 0
+      gap[ gap == 4] <- 0
+      gap[ gap !=0] <- 1
+      aldb[ is.na( aldb)] <- 0
+      gap <- as.logical( gap) } )
+  
+  rawCountyStats <- data.table( rawCountyStats)
+  keycols <-
+    colnames(rawCountyStats)[ colnames(rawCountyStats) != "n"]
+  setkeyv( rawCountyStats, keycols)
+  rawCountyStats <-
+    rawCountyStats[, list( n= sum( n),
+                          n2 = sum( replace( n, aldb == 0, 0))),
+       keyby= keycols ]
+  
+  rawStateStats <- 
+    rawCountyStats[, list( n= sum( n),
+                         n2= sum( n2)),
+       keyby= keycols[ -2] ]
   
 #+end_src
 
@@ -804,50 +878,58 @@ following aggregations based on vector maps.
 
 *** repeat for states
 
- 
+    
 #+begin_src R
-   statsNbcdState <-
-     within(
-       aggregateNbcd(
-         "statsNbcdCounty.csv",
-         col.names= c(
-           "state", "county", "nlcd", 
-           "gap", "aldb", "n"),
-         colClasses= c(
-           "character", "character", "character",
-           "factor", "numeric", "numeric")),
-       state <-
-         factor(
-           sprintf(
-             "%02d",
-             as.numeric( state))))
-   setkey( statsNbcdState, state, nlcd, gap)
+  ## statsNbcdState <-
+  ##   within(
+  ##     aggregateNbcd(
+  ##       "statsNbcdCounty.csv",
+  ##       col.names= c(
+  ##         "state", "county", "nlcd", 
+  ##         "gap", "aldb", "n"),
+  ##       colClasses= c(
+  ##         "character", "character", "character",
+  ##         "factor", "numeric", "numeric")),
+  ##     state <-
+  ##       factor(
+  ##         sprintf(
+  ##           "%02d",
+  ##           as.numeric( state))))
+  ## setkey( statsNbcdState, state, nlcd, gap)
+  
+  statsNbcdState <-
+    rawStateStats[, list( aldb= weighted.mean( aldb, n),
+                         aldb2= weighted.mean( aldb, n2),
+                         n= sum( n),
+                         n2= sum( n2),
+                         ha= sum(n) * 30^2 / 10^4,
+                         ha2= sum(n2) * 30^2 / 10^4),
+                  keyby= "state,nlcd,gap"] 
+  stateAreas <-
+    statsNbcdState[ , list( totHa= sum(ha)),
+                   keyby= "state"]
+  statsNbcdState <-
+    statsNbcdState[ stateAreas][, frac:=ha/totHa]
    
-   statsNbcdState <-
-     statsNbcdState[ , list(
-                         aldb= weighted.mean( aldb, ha),
-                         aldb2= weighted.mean( aldb2, ha),
-                         ha= sum( ha),
-                         ha2= sum( ha2)),
-                    by= c( "fips", "nlcd", "gap")]
-   setkey( statsNbcdState, fips, nlcd, gap)
-   
-   
-   stateAreas <-
-     statsNbcdState[ , list(
-                         totHa= sum(ha)),
-                    by= "fips"]
-   statsNbcdState <-
-     statsNbcdState[ stateAreas][, frac:=ha/totHa]
-   
-   nbcdStateAldb <- 
+  statsNbcdState <-
+    rbind(
+      statsNbcdState[ !nlcd %in% as.character( c( 41, 42, 43, 90)),
+                      list( state, nlcd, gap, aldb, ha, frac)],
+      statsNbcdState[  nlcd %in% as.character( c( 41, 42, 43, 90)),
+                      list( state, nlcd, gap, aldb= aldb2, ha, frac)])
+  setkey( statsNbcdState, state, nlcd, gap)
+  
+  ## test
+  ## any( statsNbcdState[, list( frac= sum(frac)), by= state][, frac] - 1 > 0.001)
+  
+  nbcdStateAldb <- 
     data.table(
       cast(
         data= statsNbcdState,
-        formula= fips ~ gap + nlcd,
+        formula= state ~ gap + nlcd,
         value= "aldb",
         subset= !is.na( aldb)),
-      key= "fips")
+      key= "state")
   
   setnames(
     nbcdStateAldb,
@@ -1029,58 +1111,60 @@ following aggregations based on vector maps.
   
   ## define aggregateNbcd()
   
+  ## statsNbcdCounty <-
+  ##   within(
+  ##     aggregateNbcd(
+  ##       "statsNbcdCounty.csv",
+  ##       col.names= c(
+  ##         "state", "county", "nlcd", 
+  ##         "gap", "aldb", "n"),
+  ##       colClasses= c(
+  ##         "character", "character", "character",
+  ##         "factor", "numeric", "numeric")),
+  ##     { state <-
+  ##         sprintf(
+  ##           "%02d",
+  ##           as.numeric( state))
+  ##       county <-
+  ##         sprintf(
+  ##           "%03d",
+  ##           as.numeric( county))
+  ##     fips <-
+  ##       factor(
+  ##         paste( state, county))})
+  
+  ## setkey( statsNbcdCounty, state, county, nlcd, gap)
+  
   statsNbcdCounty <-
-    within(
-      aggregateNbcd(
-        "statsNbcdCounty.csv",
-        col.names= c(
-          "state", "county", "nlcd", 
-          "gap", "aldb", "n"),
-        colClasses= c(
-          "character", "character", "character",
-          "factor", "numeric", "numeric")),
-      { state <-
-          sprintf(
-            "%02d",
-            as.numeric( state))
-        county <-
-          sprintf(
-            "%03d",
-            as.numeric( county))
-      fips <-
-        factor(
-          paste( state, county))})
-  
-  setkey( statsNbcdCounty, state, county, nlcd, gap)
-  
-  
-  ## statsNbcdCounty <- 
-  ##   statsNbcdCounty[
-  ##     statsNbcdCounty[,
-  ##       list( totHa= sum( ha)),
-  ##       by= "fips"]][, frac:=ha/totHa]
-  
-  
+    rawCountyStats[, list(
+                       aldb= weighted.mean( aldb, n),
+                       aldb2= weighted.mean( aldb, n2),
+                       n= sum( n),
+                       n2= sum( n2),
+                       ha= sum(n) * 30^2 / 10^4,
+                       ha2= sum(n2) * 30^2 / 10^4),
+                   keyby= "state,county,nlcd,gap"]
   countyAreas <-
     statsNbcdCounty[, list( totHa= sum(ha)),
-                    by= c( "state", "county")]
-  setkey( countyAreas, state, county)
+                    keyby= c( "state", "county")]
   statsNbcdCounty <-
     statsNbcdCounty[ countyAreas][, frac:=ha/totHa]
   
-  
   statsNbcdCounty <-
     rbind(
-      statsNbcdCounty[ !nlcd %in% as.character( c( 41, 42, 43)),
-                      list( state, county, nlcd, gap, aldb, ha, fips)],
-      statsNbcdCounty[  nlcd %in% as.character( c( 41, 42, 43)),
-                      list( state, county, nlcd, gap, aldb= aldb2, ha, fips)])
+      statsNbcdCounty[ !nlcd %in% as.character( c( 41, 42, 43, 90)),
+                      list( state, county, nlcd, gap, aldb, ha, frac)],
+      statsNbcdCounty[  nlcd %in% as.character( c( 41, 42, 43, 90)),
+                      list( state, county, nlcd, gap, aldb= aldb2, ha, frac)])
   setkey( statsNbcdCounty, state, county, nlcd, gap)
+  
+  ## test
+  ## any( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1 > 0.001)
   
   zeroCarbonForestsIndex <-
     with(
       statsNbcdCounty,
-      nlcd %in% as.character( c( 41, 42, 43)) & is.na( aldb))
+      nlcd %in% as.character( c( 41, 42, 43, 90)) & is.na( aldb))
   
   statsNbcdCounty <-
     rbind(
@@ -1088,118 +1172,172 @@ following aggregations based on vector maps.
       merge(
         statsNbcdCounty[ zeroCarbonForestsIndex],
         statsNbcdState,
-        all.x= TRUE)[, list( state, county, nlcd, gap, aldb= aldb.y, ha = ha.x, fips)])
+        all.x= TRUE)[, list( state, county, nlcd, gap, aldb= aldb.y, ha = ha.x, frac= frac.x)])
   setkey( statsNbcdCounty, state, county, nlcd, gap)
+  
+  ## nbcdCountyAldb <- 
+  ##     data.table(
+  ##       { df <-
+  ##           cast(
+  ##             data= statsNbcdCounty,
+  ##             formula= state + county ~ gap + nlcd,
+  ##             value= "aldb",
+  ##             ## subset= !is.na( aldb)
+  ##             )
+  ##         within( df,
+  ##                fips <- paste( state, county, sep= "")) },
+  ##       key= "fips")
   
   nbcdCountyAldb <- 
       data.table(
         cast(
           data= statsNbcdCounty,
-          formula= fips ~ gap + nlcd,
+          formula= state + county ~ gap + nlcd,
           value= "aldb",
-          subset= !is.na( aldb)),
-        key= "fips")
+          ## subset= !is.na( aldb)
+          ),
+        key= "state,county")
   
   setnames(
     nbcdCountyAldb,
     colnames(nbcdCountyAldb),
-    str_replace( colnames(nbcdCountyAldb), "_", ""))
+    str_replace(
+      str_replace(
+        colnames(nbcdCountyAldb),
+        "TRUE_", "yes"),
+      "FALSE_", "no"))
+  
   
   nbcdCountyAldbMeans <- 
     data.table(
       cast(
         data=
-        statsNbcdCounty[, list( aldbAve= weighted.mean( aldb, ha)),
-                 by= c( "fips", "gap")],
-        formula= fips ~ gap,
-        value= "aldbAve",
-        subset= !is.na( aldbAve)),
-      key= "fips")
+        statsNbcdCounty[, list( aldbAve= weighted.mean( aldb, ha,
+                                  na.rm= TRUE)),
+                 by= c( "state", "county", "gap")],
+        formula= state + county ~ gap,
+        value= "aldbAve"),
+        ## subset= !is.na( aldbAve)),
+      key= "state,county")
+  
+  ## setnames(
+  ##   nbcdCountyAldbMeans,
+  ##   colnames( nbcdCountyAldbMeans)[ -1],
+  ##   sprintf(
+  ##     "%sAll",
+  ##     colnames( nbcdCountyAldbMeans)[ -1]))
   
   setnames(
     nbcdCountyAldbMeans,
-    colnames( nbcdCountyAldbMeans)[ -1],
-    sprintf(
-      "%sAll",
-      colnames( nbcdCountyAldbMeans)[ -1]))
+    c( "FALSE", "TRUE"),
+    c( "noAll", "yesAll"))
   
   nbcdCountyGapFrac <-
     data.table(
       cast(
         data= statsNbcdCounty,
-        formula= fips ~ gap,
+        formula= state + county ~ gap,
         value= "frac",
         fun.aggregate= sum,
-        subset= !is.na( aldb)),
-      key= "fips")
+        ## subset= !is.na( aldb)
+        na.rm= TRUE),
+      key= "state,county")
+  
+  ## setnames(
+  ##   nbcdCountyGapFrac,
+  ##   colnames( nbcdCountyGapFrac)[ -1],
+  ##   sprintf(
+  ##     "%sAllFr",
+  ##     str_replace(
+  ##       colnames( nbcdCountyGapFrac)[ -1],
+  ##       "_", "")))
   
   setnames(
     nbcdCountyGapFrac,
-    colnames( nbcdCountyGapFrac)[ -1],
-    sprintf(
-      "%sAllFr",
-      str_replace(
-        colnames( nbcdCountyGapFrac)[ -1],
-        "_", "")))
+    c( "FALSE", "TRUE"),
+    c( "noAllFr", "yesAllFr"))
   
   nbcdCountyGapHa <-
     data.table(
       cast(
         data= statsNbcdCounty,
-        formula= fips ~ gap,
+        formula= state + county ~ gap,
         value= "ha",
         fun.aggregate= sum,
-        subset= !is.na( aldb)),
-      key= "fips")
+        ## subset= !is.na( aldb)
+        na.rm= TRUE),
+      key= "state,county")
+  
+  ## setnames(
+  ##   nbcdCountyGapHa,
+  ##   colnames( nbcdCountyGapHa)[ -1],
+  ##   sprintf(
+  ##     "%sAllHa",
+  ##     str_replace(
+  ##       colnames( nbcdCountyGapHa)[ -1],
+  ##       "_", "")))
   
   setnames(
     nbcdCountyGapHa,
-    colnames( nbcdCountyGapHa)[ -1],
-    sprintf(
-      "%sAllHa",
-      str_replace(
-        colnames( nbcdCountyGapHa)[ -1],
-        "_", "")))
+    c( "FALSE", "TRUE"),
+    c( "noAllHa", "yesAllHa"))
   
-   nbcdCountyFrac <- 
+  nbcdCountyFrac <- 
     data.table(
       cast(
         data= statsNbcdCounty,
-        formula= fips ~ gap + nlcd,
+        formula= state + county ~ gap + nlcd,
         value= "frac",
-        subset= !is.na( aldb)),
-      key= "fips")
+        ##subset= !is.na( aldb)
+        ),
+      key= "state,county")
   
   setnames(
     nbcdCountyFrac,
-    colnames( nbcdCountyFrac)[ -1],
-    sprintf(
-      "%sFr",
+    colnames( nbcdCountyFrac),
+    paste(
       str_replace(
-        colnames( nbcdCountyFrac)[ -1],
-        "_", "")))
+        str_replace(
+          colnames( nbcdCountyFrac),
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Fr", sep= ""))
   
   nbcdCountyHa <- 
     data.table(
       cast(
         data= statsNbcdCounty,
-        formula= fips ~ gap + nlcd,
+        formula= state + county ~ gap + nlcd,
         value= "ha",
-        subset= !is.na( aldb)),
-      key= "fips")
+        ## subset= !is.na( aldb)
+        ),
+      key= "state,county")
   
   setnames(
     nbcdCountyHa,
-    colnames( nbcdCountyHa)[ -1],
-    sprintf(
-      "%sHa",
+    colnames( nbcdCountyHa),
+    paste(
       str_replace(
-        colnames( nbcdCountyHa)[ -1],
-        "_", "")))
+        str_replace(
+          colnames( nbcdCountyHa),
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Ha", sep= ""))
+  
    
-  nbcdCounty <- nbcdCountyAldb[ nbcdCountyAldbMeans]
-  nbcdCounty <- nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
-  nbcdCounty <- nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
+  nbcdCounty <-
+    nbcdCountyAldb[ nbcdCountyAldbMeans]
+  nbcdCounty <-
+    nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
+  nbcdCounty <-
+    nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
+  ## setcolorder( nbcdCounty, c( 1, 2, order( colnames( nbcdCounty)[-(1:2)]) +2))
+  
+  nbcdCounty <-
+    nbcdCounty[, fips := paste( state, county, sep= "")]
+  nbcdCounty <-
+    nbcdCounty[, state := NULL][, county := NULL]
+  setkey( nbcdCounty, fips)
   setcolorder( nbcdCounty, order( colnames( nbcdCounty)))
   
   nbcdCountyChar <-
