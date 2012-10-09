@@ -19,6 +19,9 @@
 
 * TODO tangle out the R code and run it from the Makefile
 
+This won't work until another function call is included to run the R code.
+
+
 * initialize the session
 #+NAME: init
 #+BEGIN_SRC R :tangle no
@@ -35,7 +38,7 @@
 ** process Puerto Rico to work out steps
 
 #+NAME: grid
-#+BEGIN_SRC R :tangle no
+#+BEGIN_SRC R :tangle no :eval no
   
   pr <- raster( "nlcd2006/pr_landcover_wimperv_10-28-08_se5.img")
   NAvalue( pr) <- 0
@@ -87,28 +90,39 @@
 #+results:
 
 
-** load NLCD rasters
+* load NLCD rasters
+
 
 #+BEGIN_SRC R 
   
   regionPatterns <-
-    list( PuertoRico= "pr.*?img$",
-          Hawaii= "hi.*?img$",
-          Alaska= "ak.*?img$",
-          cUSA= "nlcd2006.*?img$")
+    list(
+      Nlcd01v1PR= "pr.*?img$",
+      Nlcd01v1HI= "hi.*?img$",
+      Nlcd01v1AK= "ak.*?img$",
+      Nlcd01v1= "nlcd2001_mosaic_2-20-07.img$",
+      Nlcd01v2= "nlcd2001_landcover_v2_2-13-11.img$",
+      Nlcd06= "nlcd2006_landcover_4-20-11_se5.img$")
   
-  regions <- names( regionPatterns)
-  names( regions) <- names( regionPatterns)
+  regions <-
+    names( regionPatterns)
+  names( regions) <-
+    names( regionPatterns)
           
   nlcdRasters <-
-    llply( regionPatterns,
-          function( patt) {
-            r <- raster( list.files( "nlcd2006",
-                                    patt= patt,
-                                    full.names= TRUE))
-            NAvalue( r) <- 0
-            r
-          })
+    llply(
+      regionPatterns,
+      function( patt) {
+        r <-
+          raster(
+            list.files(
+              "nlcd",
+              patt= patt,
+              full.names= TRUE,
+              recursive= TRUE))
+        NAvalue( r) <- 0
+        r
+      })
   
 #+END_SRC
 
@@ -272,7 +286,9 @@ the Makefile.
 #+END_SRC
 
 
-#+NAME: grassCreate( REGION="PuertoRico")
+*** grassCreate( REGION="Nlcd01v1PR")
+
+#+NAME: grassCreate( REGION="Nlcd01v1PR")
 #+BEGIN_SRC sh :session :noweb yes :results output code replace
   # echo ./create_location.sh aeaGrid5min${REGION}.img ${REGION} grass
   
@@ -304,31 +320,93 @@ the Makefile.
   EOF
 #+END_SRC
   
-#+NAME: rInGdalNlcd( region= "PuertoRico")
-#+BEGIN_SRC R :results value verbatim replace
+
+*** rInGdalNlcd( region= "Nlcd01v1PR")
+
+#+NAME: rInGdalNlcd( region= "Nlcd01v1PR")
+#+BEGIN_SRC R :results value verbatim replace 
   path <-
-    list.files( "nlcd2006",
-               patt= regionPatterns[[ region]],
-               full.names= TRUE)
-  sprintf( "r.in.gdal input=%s output=nlcd2006", path)
+    list.files(
+      "nlcd",
+      patt= regionPatterns[[ region]],
+      full.names= TRUE,
+      recursive= TRUE)
+  sprintf( "r.in.gdal input=%s output=%s", path, region)
 #+END_SRC
 
 #+RESULTS: rInGdalNlcd
-: r.in.gdal input=nlcd2006/pr_landcover_wimperv_10-28-08_se5.img output=nlcd2006
+: r.in.gdal input=nlcd/pr_landcover_wimperv_10-28-08_se5.img output=Nlcd01v1PR
 
-*** TODO add '-N' to r.stats for NLCD/GAP tabulation to eliminate *,*,*,n record created by the mask
+#+CALL: rInGdalNlcd( "Nlcd01v1")
 
-#+NAME: grassMapcalc( REGION= "PuertoRico")
+#+begin_src sh
+  r.in.gdal input=nlcd2006/NLCD2001_landcover_v2_2-13-11/nlcd2001_landcover_v2_2-13-11.img output=nlcd2001
+  r.reclass input=nlcd2001 output=nlcd2001_71 <<EOF 
+  71 = 71
+ ,* = 0
+  EOF
+  
+#+end_src
+
+**** TODO add '-N' to r.stats for NLCD/GAP tabulation to eliminate *,*,*,n record created by the mask
+
+*** grassMapcalc( REGION= "Nlcd01v1PR")
+
+#+NAME: grassMapcalc( REGION= "Nlcd01v1PR")
 #+BEGIN_SRC sh :session :results output code replace
   cat <<EOF 
-  r.mapcalc MASK="if( nlcd2006 > 0, 1, null())"
-  echo grid_5min,nlcd2006,gap,n > stats${REGION}.csv
-  r.stats -c input=grid_5min,nlcd2006,gap fs=, >> stats${REGION}.csv
+  r.mapcalc MASK="if( ${REGION} > 0, 1, null())"
+  echo grid_5min,${REGION},gap,n > stats${REGION}.csv
+  r.stats -c input=grid_5min,${REGION},gap fs=, >> stats${REGION}.csv
   r.mask -r
   echo grid_5min,n > grid${REGION}.csv
   r.stats -c input=grid_5min fs=, >> grid${REGION}.csv
   EOF
-  
+#+END_SRC
+
+#+results: grassMapcalc
+#+BEGIN_SRC sh
+r.mapcalc MASK="if( Nlcd01v1PR > 0, 1, null())"
+echo grid_5min,Nlcd01v1PR,gap,n > statsNlcd01v1PR.csv
+r.stats -c input=grid_5min,Nlcd01v1PR,gap fs=, >> statsNlcd01v1PR.csv
+r.mask -r
+echo grid_5min,n > gridNlcd01v1PR.csv
+r.stats -c input=grid_5min fs=, >> gridNlcd01v1PR.csv
+#+END_SRC
+
+
+*** TODO change function args to match new region names
+
+#+NAME: grassPuertoRico
+#+BEGIN_SRC sh :session :eval no :noweb yes :tangle tangle/grassPuertoRico.sh :shebang "#!/bin/bash -v"
+  <<grassCreate( "PuertoRico")>>
+  <<rInGdalNlcd( "PuertoRico")>>
+  <<grassMapcalc( "PuertoRico")>>
+#+END_SRC
+
+#+NAME: grassHawaii
+#+BEGIN_SRC sh :session :eval no :noweb yes :tangle tangle/grassHawaii.sh :shebang "#!/bin/bash -v"
+  <<grassCreate( "Hawaii")>>
+  <<rInGdalNlcd( "Hawaii")>>
+  <<grassMapcalc( "Hawaii")>>
+#+END_SRC
+
+#+NAME: grassAlaska
+#+BEGIN_SRC sh :session :eval no :noweb yes :tangle tangle/grassAlaska.sh :shebang "#!/bin/bash -v"
+  <<grassCreate( "Alaska")>>
+  <<rInGdalNlcd( "Alaska")>>
+  <<grassMapcalc( "Alaska")>>
+#+END_SRC
+
+#+NAME: grassNlcd
+#+BEGIN_SRC sh :session :noweb yes :tangle tangle/grasscUSA.sh :shebang "#!/bin/bash -v"
+  <<grassCreate( "cUSA")>>
+  <<rInGdalNlcd( "Nlcd01v1")>>
+  <<rInGdalNlcd( "Nlcd01v2")>>
+  <<rInGdalNlcd( "Nlcd06")>>
+  <<grassMapcalc( "Nlcd01v1")>>
+  <<grassMapcalc( "Nlcd01v2")>>
+  <<grassMapcalc( "Nlcd06")>>
   cat <<'EOF'
   # run GRASS' cleanup routine
   $GISBASE/etc/clean_temp
@@ -338,38 +416,10 @@ the Makefile.
   EOF
 #+END_SRC
 
-#+NAME: grassPuertoRico
-#+BEGIN_SRC sh :session :noweb yes :tangle grassPuertoRico.sh :shebang "#!/bin/bash -v"
-  <<grassCreate( "PuertoRico")>>
-  <<rInGdalNlcd( "PuertoRico")>>
-  <<grassMapcalc( "PuertoRico")>>
-#+END_SRC
-
-#+NAME: grassHawaii
-#+BEGIN_SRC sh :session :noweb yes :tangle grassHawaii.sh :shebang "#!/bin/bash -v"
-  <<grassCreate( "Hawaii")>>
-  <<rInGdalNlcd( "Hawaii")>>
-  <<grassMapcalc( "Hawaii")>>
-#+END_SRC
-
-#+NAME: grassAlaska
-#+BEGIN_SRC sh :session :noweb yes :tangle grassAlaska.sh :shebang "#!/bin/bash -v"
-  <<grassCreate( "Alaska")>>
-  <<rInGdalNlcd( "Alaska")>>
-  <<grassMapcalc( "Alaska")>>
-#+END_SRC
-
-#+NAME: grasscUSA
-#+BEGIN_SRC sh :session :noweb yes :tangle grasscUSA.sh :shebang "#!/bin/bash -v"
-  <<grassCreate( "cUSA")>>
-  <<rInGdalNlcd( "cUSA")>>
-  <<grassMapcalc( "cUSA")>>
-#+END_SRC
-
 ** aggregate the results
 
 #+NAME: writeFracsProto
-#+begin_src R 
+#+begin_src R :eval no
   library( reshape)
   library( Hmisc)
   
@@ -488,9 +538,13 @@ the Makefile.
   
   zip( "pad-us_nlcd.zip", list.files( patt= "^fracs.*?\\csv$"))
 #+end_src
+   
+
+*** TODO do this with data.table
 
 
 ** generate NBCD statistics
+
 
 *** by 5' grid cells
 
@@ -547,6 +601,7 @@ the Makefile.
 
 *** TODO convert NAs to zeros for \*Fr and \*Ha in CSVs and SHPs
 *** TODO trim spaces in char data frames before writing CSVs
+
 
 *** aggregate r.stats output
 
@@ -614,6 +669,7 @@ following aggregations based on vector maps.
 
 #+end_src
 
+
 **** The new way
 
 #+begin_src R
@@ -625,7 +681,7 @@ following aggregations based on vector maps.
   
   rawCountyStats <-
     read.csv(
-      "statsNbcdCounty.csv",
+      "csv/statsNbcdNlcd01v1County.csv",
       na.strings= "*",
       header= TRUE,
       col.names= c(
@@ -657,7 +713,7 @@ following aggregations based on vector maps.
   setkeyv( rawCountyStats, keycols)
   rawCountyStats <-
     rawCountyStats[, list( n= sum( n),
-                          n2 = sum( replace( n, aldb == 0, 0))),
+                          n2 = sum( replace( n, aldb <= 0, 0))),
        keyby= keycols ]
   
   rawStateStats <- 
@@ -666,6 +722,7 @@ following aggregations based on vector maps.
        keyby= keycols[ -2] ]
   
 #+end_src
+
 
 *** by NBCD mapping zones
   
@@ -677,15 +734,46 @@ following aggregations based on vector maps.
   
   ## define aggregateNbcd()
   
-  statsNbcdZone <-
-    aggregateNbcd(
-      "statsNbcdZone.csv",
+  ## statsNbcdZone <-
+  ##   aggregateNbcd(
+  ##     "statsNbcdZone.csv",
+  ##     col.names= c(
+  ##       "zone", "nlcd", "gap",
+  ##       "aldb", "n"),
+  ##     colClasses= c(
+  ##       "character", "character", "factor",
+  ##       "numeric", "numeric"))
+  
+  rawZoneStats <-
+    read.csv(
+      "csv/statsNbcdNlcd01v1Zone.csv",
+      na.strings= "*",
+      header= TRUE,
       col.names= c(
-        "zone", "nlcd", "gap",
-        "aldb", "n"),
+        "zone", "nlcd", 
+        "gap", "aldb", "n"),
       colClasses= c(
-        "character", "character", "factor",
-        "numeric", "numeric"))
+        "character", "character",
+        "numeric", "numeric", "numeric"))
+  
+  rawZoneStats <-
+    within( rawZoneStats, {
+      state[  is.na(  state)] <- 0   
+      zone[ is.na( zone)] <- 0    
+      gap[ is.na( gap)] <- 0
+      gap[ gap == 4] <- 0
+      gap[ gap !=0] <- 1
+      aldb[ is.na( aldb)] <- 0
+      gap <- as.logical( gap) } )
+  
+  rawCountyStats <- data.table( rawCountyStats)
+  keycols <-
+    colnames(rawCountyStats)[ colnames(rawCountyStats) != "n"]
+  setkeyv( rawCountyStats, keycols)
+  rawCountyStats <-
+    rawCountyStats[, list( n= sum( n),
+                          n2 = sum( replace( n, aldb <= 5, 0))),
+       keyby= keycols ]
   
   zoneAreas <-
     statsNbcdZone[, list( totHa= sum(ha)),
@@ -873,6 +961,11 @@ following aggregations based on vector maps.
   
 #+end_src
 
+**** TODO finish updating zone stat procedure to match state/county
+
+GAP TRUE/FALSE naming, . . .
+
+
 **** TODO figure out where null values in NBCD are coming from
 
 
@@ -880,22 +973,6 @@ following aggregations based on vector maps.
 
     
 #+begin_src R
-  ## statsNbcdState <-
-  ##   within(
-  ##     aggregateNbcd(
-  ##       "statsNbcdCounty.csv",
-  ##       col.names= c(
-  ##         "state", "county", "nlcd", 
-  ##         "gap", "aldb", "n"),
-  ##       colClasses= c(
-  ##         "character", "character", "character",
-  ##         "factor", "numeric", "numeric")),
-  ##     state <-
-  ##       factor(
-  ##         sprintf(
-  ##           "%02d",
-  ##           as.numeric( state))))
-  ## setkey( statsNbcdState, state, nlcd, gap)
   
   statsNbcdState <-
     rawStateStats[, list( aldb= weighted.mean( aldb, n),
@@ -920,7 +997,7 @@ following aggregations based on vector maps.
   setkey( statsNbcdState, state, nlcd, gap)
   
   ## test
-  ## any( statsNbcdState[, list( frac= sum(frac)), by= state][, frac] - 1 > 0.001)
+  ## any( abs( statsNbcdState[, list( frac= sum(frac)), by= state][, frac] - 1) > 0.001)
   
   nbcdStateAldb <- 
     data.table(
@@ -928,110 +1005,124 @@ following aggregations based on vector maps.
         data= statsNbcdState,
         formula= state ~ gap + nlcd,
         value= "aldb",
-        subset= !is.na( aldb)),
+        ## subset= !is.na( aldb)
+        ),
       key= "state")
   
   setnames(
     nbcdStateAldb,
-    colnames(nbcdStateAldb),
-    str_replace( colnames(nbcdStateAldb), "_", ""))
+    colnames( nbcdStateAldb),
+    str_replace(
+      str_replace(
+        colnames(nbcdStateAldb),
+        "TRUE_", "yes"),
+      "FALSE_", "no"))
+  
   
   nbcdStateAldbMeans <- 
      data.table(
        cast(
          data=
          statsNbcdState[, list( aldbAve= weighted.mean( aldb, ha)),
-                  by= c( "fips", "gap")],
-         formula= fips ~ gap,
+                  by= c( "state", "gap")],
+         formula= state ~ gap,
          value= "aldbAve",
          subset= !is.na( aldbAve)),
-       key= "fips")
+       key= "state")
   
   setnames(
     nbcdStateAldbMeans,
-    colnames( nbcdStateAldbMeans)[ -1],
-    sprintf(
-      "%sAll",
-      colnames( nbcdStateAldbMeans)[ -1]))
+    c( "FALSE", "TRUE"),
+    c( "noAll", "yesAll"))
   
   nbcdStateGapFrac <-
     data.table(
       cast(
         data= statsNbcdState,
-        formula= fips ~ gap,
+        formula= state ~ gap,
         value= "frac",
         fun.aggregate= sum,
-        subset= !is.na( aldb)),
-      key= "fips")
+        ## subset= !is.na( aldb)
+        na.rm = TRUE),
+      key= "state")
   
   setnames(
     nbcdStateGapFrac,
-    colnames( nbcdStateGapFrac)[ -1],
-    sprintf(
-      "%sAllFr",
-      str_replace(
-        colnames( nbcdStateGapFrac)[ -1],
-        "_", "")))
+    c( "FALSE", "TRUE"),
+    c( "noAllFr", "yesAllFr"))
   
   nbcdStateGapHa <-
     data.table(
       cast(
         data= statsNbcdState,
-        formula= fips ~ gap,
+        formula= state ~ gap,
         value= "ha",
         fun.aggregate= sum,
-        subset= !is.na( aldb)),
-      key= "fips")
+        ## subset= !is.na( aldb)
+        na.rm= TRUE),
+      key= "state")
   
   setnames(
     nbcdStateGapHa,
-    colnames( nbcdStateGapHa)[ -1],
-    sprintf(
-      "%sAllHa",
-      str_replace(
-        colnames( nbcdStateGapHa)[ -1],
-        "_", "")))
+    c( "FALSE", "TRUE"),
+    c( "noAllHa", "yesAllHa"))
   
    nbcdStateFrac <- 
     data.table(
       cast(
         data= statsNbcdState,
-        formula= fips ~ gap + nlcd,
+        formula= state ~ gap + nlcd,
         value= "frac",
-        subset= !is.na( aldb)),
-      key= "fips")
+        ## subset= !is.na( aldb)
+        ),
+      key= "state")
   
   setnames(
     nbcdStateFrac,
     colnames( nbcdStateFrac)[ -1],
-    sprintf(
-      "%sFr",
+    paste(
       str_replace(
-        colnames( nbcdStateFrac)[ -1],
-        "_", "")))
+        str_replace(
+          colnames( nbcdStateFrac)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Fr", sep= ""))
   
   nbcdStateHa <- 
     data.table(
       cast(
         data= statsNbcdState,
-        formula= fips ~ gap + nlcd,
+        formula= state ~ gap + nlcd,
         value= "ha",
-        subset= !is.na( aldb)),
-      key= "fips")
+        ## subset= !is.na( aldb)
+        ),
+      key= "state")
   
   setnames(
     nbcdStateHa,
     colnames( nbcdStateHa)[ -1],
-    sprintf(
-      "%sHa",
+    paste(
       str_replace(
-        colnames( nbcdStateHa)[ -1],
-        "_", "")))
+        str_replace(
+          colnames( nbcdStateHa)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Ha", sep= ""))
    
-  nbcdState <- nbcdStateAldb[ nbcdStateAldbMeans]
-  nbcdState <- nbcdState[ nbcdStateGapFrac][ nbcdStateGapHa]
-  nbcdState <- nbcdState[ nbcdStateFrac][ nbcdStateHa]
-  setcolorder( nbcdState, order( colnames( nbcdState)))
+  nbcdState <-
+    nbcdStateAldb[ nbcdStateAldbMeans]
+  nbcdState <-
+    nbcdState[ nbcdStateGapFrac][ nbcdStateGapHa]
+  nbcdState <-
+    nbcdState[ nbcdStateFrac][ nbcdStateHa]
+  
+  setnames(
+    nbcdState,
+    "state", "fips")
+  
+  setcolorder(
+    nbcdState,
+    order( colnames( nbcdState)))
   
   nbcdStateChar <-
     str_trim(
@@ -1104,36 +1195,10 @@ following aggregations based on vector maps.
 *** repeat for counties
 
 #+begin_src R
-  library( reshape)
-  library( Hmisc)
-  library( data.table)
-  library( stringr)
-  
-  ## define aggregateNbcd()
-  
-  ## statsNbcdCounty <-
-  ##   within(
-  ##     aggregateNbcd(
-  ##       "statsNbcdCounty.csv",
-  ##       col.names= c(
-  ##         "state", "county", "nlcd", 
-  ##         "gap", "aldb", "n"),
-  ##       colClasses= c(
-  ##         "character", "character", "character",
-  ##         "factor", "numeric", "numeric")),
-  ##     { state <-
-  ##         sprintf(
-  ##           "%02d",
-  ##           as.numeric( state))
-  ##       county <-
-  ##         sprintf(
-  ##           "%03d",
-  ##           as.numeric( county))
-  ##     fips <-
-  ##       factor(
-  ##         paste( state, county))})
-  
-  ## setkey( statsNbcdCounty, state, county, nlcd, gap)
+  ## library( reshape)
+  ## library( Hmisc)
+  ## library( data.table)
+  ## library( stringr)
   
   statsNbcdCounty <-
     rawCountyStats[, list(
@@ -1159,7 +1224,7 @@ following aggregations based on vector maps.
   setkey( statsNbcdCounty, state, county, nlcd, gap)
   
   ## test
-  ## any( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1 > 0.001)
+  ## any( abs( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1) > 0.001)
   
   zeroCarbonForestsIndex <-
     with(
@@ -1174,19 +1239,6 @@ following aggregations based on vector maps.
         statsNbcdState,
         all.x= TRUE)[, list( state, county, nlcd, gap, aldb= aldb.y, ha = ha.x, frac= frac.x)])
   setkey( statsNbcdCounty, state, county, nlcd, gap)
-  
-  ## nbcdCountyAldb <- 
-  ##     data.table(
-  ##       { df <-
-  ##           cast(
-  ##             data= statsNbcdCounty,
-  ##             formula= state + county ~ gap + nlcd,
-  ##             value= "aldb",
-  ##             ## subset= !is.na( aldb)
-  ##             )
-  ##         within( df,
-  ##                fips <- paste( state, county, sep= "")) },
-  ##       key= "fips")
   
   nbcdCountyAldb <- 
       data.table(
@@ -1207,7 +1259,6 @@ following aggregations based on vector maps.
         "TRUE_", "yes"),
       "FALSE_", "no"))
   
-  
   nbcdCountyAldbMeans <- 
     data.table(
       cast(
@@ -1219,13 +1270,6 @@ following aggregations based on vector maps.
         value= "aldbAve"),
         ## subset= !is.na( aldbAve)),
       key= "state,county")
-  
-  ## setnames(
-  ##   nbcdCountyAldbMeans,
-  ##   colnames( nbcdCountyAldbMeans)[ -1],
-  ##   sprintf(
-  ##     "%sAll",
-  ##     colnames( nbcdCountyAldbMeans)[ -1]))
   
   setnames(
     nbcdCountyAldbMeans,
@@ -1243,15 +1287,6 @@ following aggregations based on vector maps.
         na.rm= TRUE),
       key= "state,county")
   
-  ## setnames(
-  ##   nbcdCountyGapFrac,
-  ##   colnames( nbcdCountyGapFrac)[ -1],
-  ##   sprintf(
-  ##     "%sAllFr",
-  ##     str_replace(
-  ##       colnames( nbcdCountyGapFrac)[ -1],
-  ##       "_", "")))
-  
   setnames(
     nbcdCountyGapFrac,
     c( "FALSE", "TRUE"),
@@ -1268,15 +1303,6 @@ following aggregations based on vector maps.
         na.rm= TRUE),
       key= "state,county")
   
-  ## setnames(
-  ##   nbcdCountyGapHa,
-  ##   colnames( nbcdCountyGapHa)[ -1],
-  ##   sprintf(
-  ##     "%sAllHa",
-  ##     str_replace(
-  ##       colnames( nbcdCountyGapHa)[ -1],
-  ##       "_", "")))
-  
   setnames(
     nbcdCountyGapHa,
     c( "FALSE", "TRUE"),
@@ -1288,17 +1314,17 @@ following aggregations based on vector maps.
         data= statsNbcdCounty,
         formula= state + county ~ gap + nlcd,
         value= "frac",
-        ##subset= !is.na( aldb)
+        ## subset= !is.na( aldb)
         ),
       key= "state,county")
   
   setnames(
     nbcdCountyFrac,
-    colnames( nbcdCountyFrac),
+    colnames( nbcdCountyFrac)[ -(1:2)],
     paste(
       str_replace(
         str_replace(
-          colnames( nbcdCountyFrac),
+          colnames( nbcdCountyFrac)[ -(1:2)],
           "TRUE_", "yes"),
         "FALSE_", "no"),
       "Fr", sep= ""))
@@ -1315,11 +1341,11 @@ following aggregations based on vector maps.
   
   setnames(
     nbcdCountyHa,
-    colnames( nbcdCountyHa),
+    colnames( nbcdCountyHa)[ -(1:2)],
     paste(
       str_replace(
         str_replace(
-          colnames( nbcdCountyHa),
+          colnames( nbcdCountyHa)[ -(1:2)],
           "TRUE_", "yes"),
         "FALSE_", "no"),
       "Ha", sep= ""))
@@ -1331,7 +1357,6 @@ following aggregations based on vector maps.
     nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
   nbcdCounty <-
     nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
-  ## setcolorder( nbcdCounty, c( 1, 2, order( colnames( nbcdCounty)[-(1:2)]) +2))
   
   nbcdCounty <-
     nbcdCounty[, fips := paste( state, county, sep= "")]
@@ -1407,3 +1432,52 @@ following aggregations based on vector maps.
 #+end_src
 
 
+*** Plots
+
+My best plot so far.  Need to simplify.
+
+#+begin_src R
+  
+  library( ggplot2)
+  library( scales)
+  
+  totalTonnes <-
+    statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
+                    keyby= "gap,nlcd"]
+  
+  ggplot( 
+    totalTonnes,
+    aes(
+      x= factor(1),
+      y= aldb,
+      fill= factor( paste( gap, nlcd))
+      )
+    ) +
+    geom_bar( position= "fill", width= 1) +
+    scale_y_continuous(labels= percent) +
+    coord_polar( theta= "y") 
+  
+  ggplot(
+    totalTonnes,
+    aes(
+      x= factor(1),
+      y= aldb,
+      fill= gap
+      )
+    ) +
+    geom_bar( width= 1, stat= "identity", position= "fill") +
+    scale_y_continuous(labels= percent) +
+    coord_polar( theta= "y") 
+  
+  ggplot(
+    totalTonnes,
+    aes(
+      x= factor(1),
+      y= aldb,
+      fill= gap
+      )
+    ) +
+    geom_bar( width= 2) +
+    coord_polar( theta= "y") 
+  
+#+end_src
