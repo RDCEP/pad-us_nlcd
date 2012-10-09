@@ -15,27 +15,49 @@ g.gisenv set=MAPSET=PERMANENT
 eval $(g.gisenv)
 
 export GRASS_MESSAGE_FORMAT=plain 
-r.in.gdal --overwrite input=nbcdWarped.vrt output=nbcd2000
+r.in.gdal --overwrite input=nbcdWarped.vrt output=nbcd
 r.in.gdal --overwrite input=cusaStatesAea.img output=states
 r.in.gdal --overwrite input=cusaCountiesAea.img output=counties
 r.in.gdal --overwrite input=nbcdZones.img output=zones
 
-g.region rast=nbcd2000
-r.mapcalc nbcd2000Zero='if( isnull( nbcd2000), 0, nbcd2000)'
+# g.region rast=nbcd
+# r.mapcalc nbcdZero='if( isnull( nbcd), 0, nbcd)'
 
-g.region rast=nlcd2006
-r.mask input=nlcd2006 maskcats="1 thru 95"
-echo grid_5min,nlcd2006,gap,nbcd2000,n > statsNbcd.csv && \
-r.stats -Nc input=grid_5min,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcd.csv 2> statsNbcd.err &
+g.region rast=Nlcd01v1
+r.mask -o input=Nlcd01v1 maskcats="1 thru 95"
 
-# echo state,nlcd2006,gap,nbcd2000,n > statsNbcdState.csv && \
-# r.stats -Nc input=states,counties,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdState.csv 2> statsNbcdState.err &
+echo grid_5min,Nlcd01v1,gap,nbcd,n > csv/statsNbcdNlcd01v1Grid5min.csv && \
+r.stats -Nc input=grid_5min,Nlcd01v1,gap,nbcd fs=, >> csv/statsNbcdNlcd01v1Grid5min.csv 2> csv/statsNbcdNlcd01v1Grid5min.err &
 
-echo state,county,nlcd2006,gap,nbcd2000,n > statsNbcdCounty.csv && \
-r.stats -Nc input=states,counties,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdCounty.csv 2> statsNbcdCounty.err &
+echo state,county,Nlcd01v1,gap,nbcd,n > csv/statsNbcdNlcd01v1County.csv && \
+r.stats -Nc input=states,counties,Nlcd01v1,gap,nbcd fs=, >> csv/statsNbcdNlcd01v1County.csv 2> csv/statsNbcdNlcd01v1County.err &
 
-echo zone,nlcd2006,gap,nbcd2000,n > statsNbcdZone.csv && \
-r.stats -Nc input=zones,nlcd2006,gap,nbcd2000Zero fs=, >> statsNbcdZone.csv 2> statsNbcdZone.err &
+echo zone,Nlcd01v1,gap,nbcd,n > csv/statsNbcdNlcd01v1Zone.csv && \
+r.stats -Nc input=zones,Nlcd01v1,gap,nbcd fs=, >> csv/statsNbcdNlcd01v1Zone.csv 2> csv/statsNbcdNlcd01v1Zone.err &
+
+# g.region rast=Nlcd01v2
+# r.mask -o input=Nlcd01v2 maskcats="1 thru 95"
+
+# echo grid_5min,Nlcd01v2,gap,nbcd,n > csv/statsNbcdNlcd01v2Grid5min.csv && \
+# r.stats -Nc input=grid_5min,Nlcd01v2,gap,nbcd fs=, >> csv/statsNbcdNlcd01v2Grid5min.csv 2> csv/statsNbcdNlcd01v2Grid5min.err &
+
+# echo state,county,nlcd01v2,gap,nbcd,n > csv/statsNbcdNlcd01v2County.csv && \
+# r.stats -Nc input=states,counties,Nlcd01v2,gap,nbcd fs=, >> csv/statsNbcdNlcd01v2County.csv 2> csv/statsNbcdNlcd01v2County.err &
+
+# echo zone,nlcd01v2,gap,nbcd,n > csv/statsNbcdZone.csv && \
+# r.stats -Nc input=zones,Nlcd01v2,gap,nbcd fs=, >> csv/statsNbcdNlcd01v2Zone.csv 2> csv/statsNbcdNlcd01v2Zone.err &
+
+# g.region rast=Nlcd06
+# r.mask -o input=Nlcd06 maskcats="1 thru 95"
+
+# echo grid_5min,nlcd06,gap,nbcd,n > csv/statsNbcdNlcd06Grid5min.csv && \
+# r.stats -Nc input=grid_5min,Nlcd06,gap,nbcd fs=, >> csv/statsNbcdNlcd06Grid5min.csv 2> csv/statsNbcdNlcd06Grid5min.err &
+
+# echo state,county,nlcd06,gap,nbcd,n > csv/statsNbcdNlcd06County.csv && \
+# r.stats -Nc input=states,counties,Nlcd06,gap,nbcd fs=, >> csv/statsNbcdNlcd06County.csv 2> csv/statsNbcdNlcd06County.err &
+
+# echo zone,nlcd06,gap,nbcd,n > csv/statsNbcdNlcd06Zone.csv && \
+# r.stats -Nc input=zones,Nlcd06,gap,nbcd fs=, >> csv/statsNbcdNlcd06Zone.csv 2> csv/statsNbcdNlcd06Zone.err &
 
 r.mask -r
 
