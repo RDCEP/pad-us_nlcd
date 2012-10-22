@@ -23,18 +23,20 @@ This won't work until another function call is included to run the R code.
 
 
 * initialize the session
+
 #+NAME: init
-#+BEGIN_SRC R :tangle no
-  ## library( raster)
-  library( raster, lib.loc="~/src/R/lib/")
-  setOptions( progress= "text")
-  library( plyr)
-  library( stringr)
-  
-  overwriteRasters <- TRUE
+#+BEGIN_SRC R :tangle tangled/init.R
+## library( raster)
+library( raster, lib.loc="~/src/R/lib/")
+setOptions( progress= "text")
+library( plyr)
+library( stringr)
+
+overwriteRasters <- TRUE
+
 #+END_SRC
 
-* are these obsolete?
+* COMMENT are these obsolete?
 ** process Puerto Rico to work out steps
 
 #+NAME: grid
@@ -94,59 +96,47 @@ This won't work until another function call is included to run the R code.
 
 
 #+NAME: regionPatterns
-#+BEGIN_SRC R
-  
-  regionPatterns <-
-    list(
-      Nlcd01v1PR= "pr.*?img$",
-      Nlcd01v1HI= "hi.*?img$",
-      Nlcd01v1AK= "ak.*?img$",
-      Nlcd01v1= "nlcd2001_mosaic_2-20-07.img$",
-      Nlcd01v2= "nlcd2001_landcover_v2_2-13-11.img$",
-      Nlcd06= "nlcd2006_landcover_4-20-11_se5.img$")
-  
-  regions <-
-    names( regionPatterns)
-  names( regions) <-
-    names( regionPatterns)
-          
+#+BEGIN_SRC R :results silent :tangle tangled/init.R
+regionPatterns <-
+  list(
+    Nlcd01v1PR= "pr.*?img$",
+    Nlcd01v1HI= "hi.*?img$",
+    Nlcd01v1AK= "ak.*?img$",
+    Nlcd01v1= "nlcd2001_mosaic_2-20-07.img$",
+    Nlcd01v2= "nlcd2001_landcover_v2_2-13-11.img$",
+    Nlcd06= "nlcd2006_landcover_4-20-11_se5.img$")
+
+regions <-
+  names( regionPatterns)
+names( regions) <-
+  names( regionPatterns)
+
+nlcdRasters <-
+  llply(
+    regionPatterns,
+    function( patt) {
+      r <-
+        raster(
+          list.files(
+            "nlcd",
+            patt= patt,
+            full.names= TRUE,
+            recursive= TRUE))
+      NAvalue( r) <- 0
+      r
+    })
+
 #+END_SRC
 
-#+BEGIN_SRC 
 
-  nlcdRasters <-
-    llply(
-      regionPatterns,
-      function( patt) {
-        r <-
-          raster(
-            list.files(
-              "nlcd",
-              patt= patt,
-              full.names= TRUE,
-              recursive= TRUE))
-        NAvalue( r) <- 0
-        r
-      })
-  
-#+END_SRC
-
-#+results:
-   
-
-
-* extend PR example for batch processing
-
-** calculate 5' cell ID for each 30m pixel
+* calculate 5' cell ID for each 30m pixel
 
 Write out a 5' raster in geographic projection where the value of each
 cell is its grid ID.  This will be reprojected into the cooridnate
 space of each PAD-US/NLCD stack.
 
 #+NAME: world  
-#+BEGIN_SRC R :noweb yes :tangle tangle/grid5minWorld.R
-  <<init>>
-  
+#+BEGIN_SRC R :tangle tangled/init.R
   world <- raster()
   res( world) <- 5/60
   ## dataType( world) <- "INT4U"
@@ -154,285 +144,273 @@ space of each PAD-US/NLCD stack.
     1:ncell( world)
   world <-
     writeRaster(
-      world, "gdal/grid5minWorld.tif",
+      world, "data/grid5minWorld.tif",
       datatype= "INT4U",
       overwrite= overwriteRasters)
 #+END_SRC
 
-#+begin_src makefile :tangle tangle/pad-us_nlcd.make
-gdal/grid5minWorld.tif: scripts/grid5minWorld.R
-	Rscript --vanilla $<
+#+begin_src makefile :eval no :tangle tangled/pad-us_nlcd.mk
+data/grid5minAeaCUSA.img: grid5minWorld.tif
+	gdalwarp -overwrite -of HFA \
+          -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
+          -te -2493045 177285 2342655 3310005 \
+          -tr 30 30 -co "COMPRESSED=YES" $< $@
 
-gdal/grid5minAeaCUSA.img: gdal/grid5minWorld.tif
-	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" -te -2493045 177285 2342655 3310005 -tr 30 30 -co "COMPRESSED=YES" $< $@
+data/grid5minAeaAlaska.img: grid5minWorld.tif
+	gdalwarp -overwrite -of HFA \
+          -t_srs "+proj=aea +lat_1=55 +lat_2=65 +lat_0=50 +lon_0=-154 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" 
+          -te -2232345 344805 1494735 2380125 \
+          -tr 30 30 -co "COMPRESSED=YES" $< $@
+
+data/grid5minAeaPuertoRico.img: grid5minWorld.tif
+	gdalwarp -overwrite -of HFA \
+          -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
+          -te 3092415 -78975 3345225 59415 \
+          -tr 30 30 -co "COMPRESSED=YES" $< $@
+
+data/grid5minAeaHawaii.img: grid5minWorld.tif
+	gdalwarp -overwrite -of HFA \
+          -t_srs "+proj=aea +lat_1=8.000000000000002 +lat_2=18 +lat_0=3 +lon_0=-157 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" \
+          -te -345945 1753875 237225 2132415 \
+          -tr 30 30 -co "COMPRESSED=YES" $< $@
+
+grids: data/grid5minAeaCUSA.img \
+       data/grid5minAeaAlaska.img \
+       data/grid5minAeaPuertoRico.img \
+       data/grid5minAeaHawaii.img
 
 #+end_src
 
 
-*** TODO How did I write the gdalwarp command for the grid IDs?
+*** COMMENT DONE How did I write the gdalwarp command for the grid IDs?
 I must have done it by hand.  This should be tangled out and called in
 the Makefile.
 
-** add zeroes to GAP data for unprotected land and coastal areas
+*** TODO get overwriteRasters value from environment variable
 
-#+BEGIN_SRC R :session *R:2*
-  gapFiles <-
-    list.files( "pad-us/PADUS1_2_regions/",
-               patt= "^PADUS1_2_.*?tif$",
-               full.names= TRUE)
-  names( gapFiles) <-
-    str_match( gapFiles,
-              "PADUS1_2_([^_]+)_GAP\\.tif$")[, 2]
-  
-  gapRasters <-
-    llply( names( regionPatterns),
-          function ( region) {
-            r <- raster( gapFiles[[ region]])
-            NAvalue( r) <- 255
-            ## r <- setMinMax( r)
-            layerNames( r) <- region
-            r
-  })
-  names( gapRasters) <- names( regionPatterns)
-  
-  setGapZero <- function( gap, grid) {
+
+** COMMENT add zeroes to GAP data for unprotected land and coastal areas
+
+skip this. unnecessary.
+
+#+BEGIN_SRC R :eval no
+gapFiles <-
+  list.files( "pad-us/data/",
+             patt= "^PADUS1_2_.*?tif$",
+             full.names= TRUE)
+names( gapFiles) <-
+  str_match( gapFiles,
+            "PADUS1_2_([^_]+)_GAP\\.tif$")[, 2]
+
+gapRasters <-
+  llply( names( regionPatterns),
+        function ( region) {
+          r <- raster( gapFiles[[ region]])
+          NAvalue( r) <- 255
+          ## r <- setMinMax( r)
+          layerNames( r) <- region
+          r
+        })
+names( gapRasters) <- names( regionPatterns)
+
+setGapZero <-
+  function( gap, grid) {
     ifelse( is.na( gap) & !is.na( grid), 0, gap)
   }
 
-  gapOverlayFunc <-
-    function ( gap, nlcd) {
-      fn <- sprintf( "gap%s.grd", layerNames( gap))
-      if( overwriteRasters | !file.exists( fn)) {
-        overlay( gap, nlcd,
-                fun= setGapZero,
-                filename= fn,
-                datatype= "INT1U",
-                overwrite= TRUE)
-      } else try( raster( fn), silent= TRUE)
-    }
-  
-  prOverlay <- gapOverlayFunc( gapRasters[[ "PuertoRico"]],
-                              nlcdRasters[[ "PuertoRico"]])
-  
-  ## gapOverlays <-
-  ##   mapply( gapRasters, nlcdRasters,
-  ##          FUN= gapOverlayFunc) 
-  
-  gapOverlays <-
-    llply( regions,
-          function( region) {
-            gapOverlayFunc( gapRasters[[ region]],
-                           nlcdRasters[[ region]])
-          })
-  
+gapOverlayFunc <-
+  function ( gap, nlcd) {
+    fn <- sprintf( "gap%s.grd", layerNames( gap))
+    if( overwriteRasters | !file.exists( fn)) {
+      overlay( gap, nlcd,
+              fun= setGapZero,
+              filename= fn,
+              datatype= "INT1U",
+              overwrite= TRUE)
+    } else try( raster( fn), silent= TRUE)
+  }
+
+gapOverlays <-
+  llply( regions,
+        function( region) {
+          gapOverlayFunc( gapRasters[[ region]],
+                         nlcdRasters[[ region]])
+        })
+
 #+END_SRC
 
 #+results:
    
-** create stacks and tabulate
 
+** COMMENT create stacks and tabulate
+
+This is too slow.  Had to do it in GRASS.
 #+NAME: stacks
-#+BEGIN_SRC R
-  ## prStack <- stack(prWorld, pr, prGap)
-  ## layerNames( prStack) <- c( "grid", "nlcd", "gap")
-  
-  ## prStack <- stack( raster( "aeaGrid5minPuertoRico.img"),
-  ##                  nlcdRasters[[ "PuertoRico"]],
-  ##                  prOverlay)
-  
-  ## prLowRes <- raster( prStack)
-  ## res( prLowRes) <- 3000
-  
-  ## prStackSmall <- resample( prStack, prLowRes, method= "ngb")
-  ## layerNames( prStackSmall) <- c( "grid", "nlcd", "gap")
-  
-  ## prCt <- crosstab( prStackSmall, long= TRUE, responseName= "n")
-  
-  ## prCt <- crosstab( prStack, long= TRUE)
-  
-  
-  aeaGridFunc <-
-    function( region) {
-      raster( sprintf( "aeaGrid5min%s.img", region))
-    }
-    
-  aeaGrids <- llply( regions, aeaGridFunc)
-                    
-  gapStackFunc <-
-    function( region) {
-      s <- stack( aeaGrids[[ region]],
-                 nlcdRasters[[ region]],
-                 gapOverlays[[ region]])
-      layerNames( s) <- c( "grid", "nlcd", "gap")
-      s
-    }
-                 
-  gapStacks <- llply( regions, gapStackFunc)
-          
-  writeCrosstabs <-
-    function( region) {
-      fn <- sprintf( "pad-us_nlcd_%s.csv", region)
-      ct <- crosstab( gapStacks[[ region]])
-      write.csv( ct, row.names= FALSE, file= fn)
-      fn
-    }
-  
-  ctFiles <- llply( regions, writeCrosstabs)
-#+END_SRC
+#+BEGIN_SRC R :eval no
+aeaGridFunc <-
+  function( region) {
+    raster( sprintf( "aeaGrid5min%s.img", region))
+  }
 
-#+results:
+aeaGrids <- llply( regions, aeaGridFunc)
 
-** write out GRASS scripts
+gapStackFunc <-
+  function( region) {
+    s <- stack( aeaGrids[[ region]],
+               nlcdRasters[[ region]],
+               gapOverlays[[ region]])
+    layerNames( s) <- c( "grid", "nlcd", "gap")
+    s
+  }
 
-#+NAME: grassPuertoRico
-#+BEGIN_SRC sh
-  ./create_location.sh aeaGrid5minPuertoRico.img PuertoRico grass
-  g.rename rast=aeaGrid5minPuertoRico.img,grid_5min
-  r.in.gdal input=nlcd2006/pr_landcover_wimperv_10-28-08_se5.img output=nlcd2006
-  r.in.gdal input=pad-us/PADUS1_2_regions/PADUS1_2_PuertoRico_GAP.tif output=gap
-  
-  r.mapcalc MASK="if( nlcd2006 > 0, 1, null())"
-  echo grid_5min,nlcd2006,gap,n > statsPuertoRico.csv
-  r.stats -c input=grid_5min,nlcd2006,gap fs=, >> statsPuertoRico.csv
-  r.mask -r
-  echo grid_5min,n > gridPuertoRico.csv
-  r.stats -c input=grid_5min fs=, >> gridPuertoRico.csv
-  
+gapStacks <- llply( regions, gapStackFunc)
+
+writeCrosstabs <-
+  function( region) {
+    fn <- sprintf( "pad-us_nlcd_%s.csv", region)
+    ct <- crosstab( gapStacks[[ region]])
+    write.csv( ct, row.names= FALSE, file= fn)
+    fn
+  }
+
+ctFiles <- llply( regions, writeCrosstabs)
 #+END_SRC
 
 
-*** grassCreate( REGION="Nlcd01v1PR")
+* noweb componenets for GRASS scripts
 
-#+NAME: grassCreate( REGION="Nlcd01v1PR")
-#+BEGIN_SRC sh :session :noweb yes :results output code replace
-  # echo ./create_location.sh aeaGrid5min${REGION}.img ${REGION} grass
-  
-  cat <<'EOF'
-  # path to GRASS binaries and libraries:
-  export GISBASE=/usr/lib/grass64
-  export PATH=$PATH:$GISBASE/bin:$GISBASE/scripts
-  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GISBASE/lib
-  
-  # use process ID (PID) as lock file number:
-  export GIS_LOCK=$$
-  
-  # path to GRASS settings file
-  export GISRC=./.grassrc6
-  EOF
-  
-  cat <<EOF
-  g.gisenv set=LOCATION_NAME=\$GIS_LOCK
-  eval \$(g.gisenv)
-  mkdir -p \$GISDBASE/\$GIS_LOCK
-  g.mapset -c mapset=temp
-  r.in.gdal in=aeaGrid5min${REGION}.img out=grid_5min location=${REGION}
-  # g.gisenv set=LOCATION_NAME=${REGION}
-  # g.gisenv set=MAPSET=PERMANENT
-  g.mapset mapset=PERMANENT location=${REGION}
-  rm -rf \$GISDBASE/\$GIS_LOCK/temp
-  # g.rename rast=aeaGrid5min${REGION}.img,grid_5min
-  r.in.gdal input=pad-us/PADUS1_2_regions/PADUS1_2_${REGION}_GAP.tif output=gap
-  EOF
+** create the GRASS location and import the reprojected grid
+
+#+NAME: grassCreate
+#+BEGIN_SRC sh :eval no
+# path to GRASS binaries and libraries:
+export GISBASE=/usr/lib/grass64
+export PATH=$PATH:$GISBASE/bin:$GISBASE/scripts
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GISBASE/lib
+
+# use process ID (PID) as lock file number:
+export GIS_LOCK=$$
+
+# path to GRASS settings file
+export GISRC=./.grassrc6
+
+g.gisenv set=LOCATION_NAME=\$GIS_LOCK
+eval \$(g.gisenv)
+mkdir -p \$GISDBASE/\$GIS_LOCK
+g.mapset -c mapset=temp
+r.in.gdal in=aeaGrid5min${LOCATION}.img out=grid_5min location=${LOCATION}
+g.mapset mapset=PERMANENT location=${LOCATION}
+rm -rf \$GISDBASE/\$GIS_LOCK/temp
+r.in.gdal input=pad-us/data/PADUS1_2_${LOCATION}_GAP.tif output=gap
 #+END_SRC
-  
 
-*** rInGdalNlcd( region= "Nlcd01v1PR")
 
+** compose the r.in.gdal commands using the R data structures
 #+NAME: rInGdalNlcd( region= "Nlcd01v1PR")
-#+BEGIN_SRC R :noweb yes :session :results output verbatim replace 
-  <<regionPatterns>>
-  path <-
-    list.files(
-      "nlcd",
-      patt= regionPatterns[[ region]],
-      full.names= TRUE,
-      recursive= TRUE)
-  cat( sprintf( "r.in.gdal input=%s output=%s", path, region), "\n")
+#+BEGIN_SRC R :results output verbatim replace 
+path <-
+  list.files(
+    "nlcd",
+    patt= regionPatterns[[ region]],
+    full.names= TRUE,
+    recursive= TRUE)
+
+cat( sprintf( "r.in.gdal input=%s output=%s", path, region), "\n")
 #+END_SRC
 
 #+RESULTS: rInGdalNlcd
 : r.in.gdal input=nlcd/pr_landcover_wimperv_10-28-08_se5.img output=Nlcd01v1PR
 
-#+CALL: rInGdalNlcd( "Nlcd01v1")
 
-#+begin_src sh
-  r.in.gdal input=nlcd2006/NLCD2001_landcover_v2_2-13-11/nlcd2001_landcover_v2_2-13-11.img output=nlcd2001
-  r.reclass input=nlcd2001 output=nlcd2001_71 <<EOF 
-  71 = 71
- ,* = 0
-  EOF
-  
+*** TODO add '-N' to r.stats for NLCD/GAP tabulation to eliminate *,*,*,n record created by the mask
+    
+
+** compose the r.stats commands for  the grid/NLCD/GAP tabulation
+
+#+NAME: grassMapcalc
+#+BEGIN_SRC sh :eval no
+r.mapcalc MASK="if( ${NLCD} > 0, 1, null())"
+echo grid_5min,${NLCD},gap,n > stats${NLCD}.csv
+r.stats -c input=grid_5min,${NLCD},gap fs=, >> stats${NLCD}.csv
+r.mask -r
+echo grid_5min,n > grid${NLCD}.csv
+r.stats -c input=grid_5min fs=, >> grid${NLCD}.csv
+#+END_SRC
+
+
+** clean up
+
+#+NAME: grassCleanup
+#+begin_src sh :eval no
+# run GRASS' cleanup routine
+$GISBASE/etc/clean_temp
+
+# remove session tmp directory:
+rm -rf /tmp/grass6-$USER-$GIS_LOCK
 #+end_src
 
-**** TODO add '-N' to r.stats for NLCD/GAP tabulation to eliminate *,*,*,n record created by the mask
 
-*** grassMapcalc( REGION= "Nlcd01v1PR")
-
-#+NAME: grassMapcalc( REGION= "Nlcd01v1PR")
-#+BEGIN_SRC sh :session :results output code replace
-  cat <<EOF 
-  r.mapcalc MASK="if( ${REGION} > 0, 1, null())"
-  echo grid_5min,${REGION},gap,n > stats${REGION}.csv
-  r.stats -c input=grid_5min,${REGION},gap fs=, >> stats${REGION}.csv
-  r.mask -r
-  echo grid_5min,n > grid${REGION}.csv
-  r.stats -c input=grid_5min fs=, >> grid${REGION}.csv
-  EOF
-#+END_SRC
-
-#+results: grassMapcalc
-#+BEGIN_SRC sh
-r.mapcalc MASK="if( Nlcd01v1PR > 0, 1, null())"
-echo grid_5min,Nlcd01v1PR,gap,n > statsNlcd01v1PR.csv
-r.stats -c input=grid_5min,Nlcd01v1PR,gap fs=, >> statsNlcd01v1PR.csv
-r.mask -r
-echo grid_5min,n > gridNlcd01v1PR.csv
-r.stats -c input=grid_5min fs=, >> gridNlcd01v1PR.csv
-#+END_SRC
-
-
-*** TODO change function args to match new region names
+* compose and execute the GRASS scripts
+    :PROPERTIES:
+    :noweb:    yes
+    :shebang:  #!/bin/bash -v
+    :session:  nil
+    :eval:     no
+    :END:
 
 #+NAME: grassPuertoRico
-#+BEGIN_SRC sh :session :eval no :noweb yes :tangle tangle/grassPuertoRico.sh :shebang "#!/bin/bash -v"
-  <<grassCreate( "PuertoRico")>>
-  <<rInGdalNlcd( "Nlcd01v1PR")>>
-  <<grassMapcalc( "Nlcd01v1PR")>>
+#+BEGIN_SRC sh :tangle tangled/grassPuertoRico.sh
+LOCATION=PuertoRico
+NLCD=Nlcd01v1PR
+<<grassCreate>>
+<<rInGdalNlcd( "Nlcd01v1PR")>>
+<<grassMapcalc>>
+<<grassCleanup>>
 #+END_SRC
 
 #+NAME: grassHawaii
-#+BEGIN_SRC sh :session :eval no :noweb yes :tangle tangle/grassHawaii.sh :shebang "#!/bin/bash -v"
-  <<grassCreate( "Hawaii")>>
-  <<rInGdalNlcd( "Nlcd01v1HI")>>
-  <<grassMapcalc( "Nlcd01v1HI")>>
+#+BEGIN_SRC sh :tangle tangled/grassHawaii.sh
+LOCATION=Hawaii
+NLCD=Nlcd01v1HI
+<<grassCreate>>
+<<rInGdalNlcd( "Nlcd01v1HI")>>
+<<grassMapcalc>>
+<<grassCleanup>>
 #+END_SRC
 
 #+NAME: grassAlaska
-#+BEGIN_SRC sh :session :eval no :noweb yes :tangle tangle/grassAlaska.sh :shebang "#!/bin/bash -v"
-  <<grassCreate( "Alaska")>>
-  <<rInGdalNlcd( "Nlcd01v1AK")>>
-  <<grassMapcalc( "Nlcd01v1AK")>>
+#+BEGIN_SRC sh :tangle tangled/grassAlaska.sh
+LOCATION=Alaska
+NLCD=Nlcd01v1AK
+<<grassCreate>>
+<<rInGdalNlcd( "Nlcd01v1AK")>>
+<<grassMapcalc>>
+<<grassCleanup>>
 #+END_SRC
 
-#+NAME: grassNlcd
-#+BEGIN_SRC sh :session :noweb yes :tangle tangle/grasscUSA.sh :shebang "#!/bin/bash -v"
-  <<grassCreate( "cUSA")>>
-  <<rInGdalNlcd( "Nlcd01v1")>>
-  <<rInGdalNlcd( "Nlcd01v2")>>
-  <<rInGdalNlcd( "Nlcd06")>>
-  <<grassMapcalc( "Nlcd01v1")>>
-  <<grassMapcalc( "Nlcd01v2")>>
-  <<grassMapcalc( "Nlcd06")>>
-  cat <<'EOF'
-  # run GRASS' cleanup routine
-  $GISBASE/etc/clean_temp
-  
-  # remove session tmp directory:
-  rm -rf /tmp/grass6-$USER-$GIS_LOCK
-  EOF
+#+NAME: grassCUSA
+#+BEGIN_SRC sh  :tangle tangled/grassCUSA.sh
+LOCATION=CUSA
+NLCD=Nlcd01v1
+<<grassCreate>>
+<<rInGdalNlcd( "Nlcd01v1")>>
+<<grassMapcalc>>
+NLCD=Nlcd01v2
+<<rInGdalNlcd( "Nlcd01v2")>>
+<<grassMapcalc>>
+NLCD=Nlcd06
+<<rInGdalNlcd( "Nlcd06")>>
+<<grassMapcalc>>
+<<grassCleanup>>
 #+END_SRC
 
-** aggregate the results
+
+* TODO ingest the NBCD data and retabulate
+
+* aggregate the results
+   :PROPERTIES:
+   :eval:     no
+   :END:
 
 #+NAME: writeFracsProto
 #+begin_src R :eval no
@@ -556,13 +534,16 @@ r.stats -c input=grid_5min fs=, >> gridNlcd01v1PR.csv
 #+end_src
    
 
-*** TODO do this with data.table
+** TODO do this with data.table
+
+   
+* generate NBCD statistics
+  :PROPERTIES:
+  :eval:     yes
+  :END:
 
 
-** generate NBCD statistics
-
-
-*** by 5' grid cells
+** by 5' grid cells
 
 #+NAME: writeNbcdStats
 #+begin_src R 
@@ -615,132 +596,91 @@ r.stats -c input=grid_5min fs=, >> gridNlcd01v1PR.csv
 #+end_src
   
 
-*** TODO convert NAs to zeros for \*Fr and \*Ha in CSVs and SHPs
-*** TODO trim spaces in char data frames before writing CSVs
+** TODO convert NAs to zeros for \*Fr and \*Ha in CSVs and SHPs
+** TODO trim spaces in char data frames before writing CSVs
 
 
-*** aggregate r.stats output
-
-This functions loads r.stats output from GRASS for any of the
-following aggregations based on vector maps.
-
-**** The old way
+** load r.stats output
 
 #+begin_src R
-  ## aggregateNbcd <-
-  ##   function( csvFile, ...) {
-  ##     stats <-
-  ##       read.csv(
-  ##         csvFile,
-  ##         na.strings= "*",
-  ##         header= TRUE,
-  ##         ...)
-  ##     stats <-
-  ##       within(
-  ##         stats,
-  ##         { levels( gap) <- c( levels( gap), "0")
-  ##           gap[ is.na( gap)] <- "0"
-  ##           gap <- combine_factor( gap, c(0,1,1,1,0))
-  ##           levels( gap) <- c( "no", "yes")
-  ##           aldb[ is.na( aldb)] <- 0
-  ##         })
-  ##     dt <- data.table( stats)
-  ##     keycols <-
-  ##       colnames(stats)[ !colnames(stats)
-  ##                       %in% c( "aldb", "n")]
-  ##     setkeyv( dt, keycols)
-  ##     ## dt[, list( aldb= weighted.mean( aldb, n),
-  ##     ##           ha= sum(n) * 30^2 / 10^4),
-  ##     ##    by= keycols]
-  ##     dt <- dt[, n2 := replace( n, aldb == 0, 0)]
-  ##     dt <- dt[, list( aldb= weighted.mean( aldb, n),
-  ##                     aldb2= weighted.mean( aldb, n2),
-  ##                     n= sum( n),
-  ##                     n2= sum( n2),
-  ##                     ha= sum(n) * 30^2 / 10^4,
-  ##                     ha2= sum(n2) * 30^2 / 10^4),
-  ##              by= keycols]
-  ##     dt
-  ##   }
-  
-  
-  ## stats <-
-  ##   read.csv(
-  ##     "statsNbcdCounty.csv",
-  ##     na.strings= "*",
-  ##     header= TRUE,
-  ##     col.names= c(
-  ##       "state", "county", "nlcd", 
-  ##       "gap", "aldb", "n"),
-  ##     colClasses= c(
-  ##       "character", "character", "character",
-  ##       "numeric", "numeric", "numeric"))
-  ## stats <-
-  ##   within( stats, {
-  ##     gap[ is.na( gap)] <- 0
-  ##     gap[ gap == 4] <- 0
-  ##     gap[ gap !=0] <- 1
-  ##     aldb[ is.na( aldb)] <- 0
-  ##     gap <- as.logical( gap) } )
+
+library( reshape)
+library( Hmisc)
+library( data.table)
+library( stringr)
+library( ggplot2)
+library( foreign)
+
+stateAttrs <-
+  read.dbf( "shp/tl_2010_us_state10.dbf")
+stateNames <-
+  data.table( stateAttrs[, c( "STATEFP10", "STUSPS10", "NAME10")])
+setnames(
+  stateNames,
+  names( stateNames),
+  c( "state", "usps", "name"))
+setkey( stateNames, state)
+
+rawCountyStats <-
+  read.csv(
+    "csv/statsNbcdNlcd01v1County.csv",
+    na.strings= "*",
+    header= TRUE,
+    col.names= c(
+      "state", "county", "nlcd", 
+      "gap", "aldb", "n"),
+    colClasses= c(
+      "character", "character", "character",
+      "numeric", "numeric", "numeric"))
+
+rawCountyStats <-
+  within( rawCountyStats, {
+    state[  is.na(  state)] <- 0   
+    county[ is.na( county)] <- 0    
+    state <-
+      str_pad( state,
+              2, pad= "0")
+    county <-
+      str_pad( county,
+              3, pad= "0")
+    gap[ is.na( gap)] <- 0
+    gap[ gap == 4] <- 0
+    gap[ gap !=0] <- 1
+    aldb[ is.na( aldb)] <- 0
+    gap <- as.logical( gap) } )
+
+rawCountyStats <- data.table( rawCountyStats)
+keycols <-
+  colnames(rawCountyStats)[ colnames(rawCountyStats) != "n"]
+setkeyv( rawCountyStats, keycols)
+
+#+end_src
+
+** zero out pixel counts for low-carbon forest observations
+
+
+#+begin_src R :results output silent
+
+rawCountyStats[, n2 := n]
+
+rawCountyStats[ nlcd %in% as.character( c( 41, 42, 43, 90))
+                 & aldb <= 5,
+               n2 := 0]
+
+rawCountyStats <-
+  rawCountyStats[, list( n= sum( n),
+                        n2 = sum( n2)),
+                 keyby= keycols ]
+
+rawStateStats <- 
+  rawCountyStats[, list( n= sum( n),
+                        n2= sum( n2)),
+                 keyby= keycols[ -2] ]
 
 #+end_src
 
 
-**** The new way
-
-#+begin_src R
-  
-  library( reshape)
-  library( Hmisc)
-  library( data.table)
-  library( stringr)
-  
-  rawCountyStats <-
-    read.csv(
-      "csv/statsNbcdNlcd01v1County.csv",
-      na.strings= "*",
-      header= TRUE,
-      col.names= c(
-        "state", "county", "nlcd", 
-        "gap", "aldb", "n"),
-      colClasses= c(
-        "character", "character", "character",
-        "numeric", "numeric", "numeric"))
-  
-  rawCountyStats <-
-    within( rawCountyStats, {
-      state[  is.na(  state)] <- 0   
-      county[ is.na( county)] <- 0    
-      state <-
-        str_pad( state,
-                2, pad= "0")
-      county <-
-        str_pad( county,
-                3, pad= "0")
-      gap[ is.na( gap)] <- 0
-      gap[ gap == 4] <- 0
-      gap[ gap !=0] <- 1
-      aldb[ is.na( aldb)] <- 0
-      gap <- as.logical( gap) } )
-  
-  rawCountyStats <- data.table( rawCountyStats)
-  keycols <-
-    colnames(rawCountyStats)[ colnames(rawCountyStats) != "n"]
-  setkeyv( rawCountyStats, keycols)
-  rawCountyStats <-
-    rawCountyStats[, list( n= sum( n),
-                          n2 = sum( replace( n, aldb <= 0, 0))),
-       keyby= keycols ]
-  
-  rawStateStats <- 
-    rawCountyStats[, list( n= sum( n),
-                         n2= sum( n2)),
-       keyby= keycols[ -2] ]
-  
-#+end_src
-
-
-*** by NBCD mapping zones
+** by NBCD mapping zones
   
 #+begin_src R
   library( reshape)
@@ -977,478 +917,660 @@ following aggregations based on vector maps.
   
 #+end_src
 
-**** TODO finish updating zone stat procedure to match state/county
+*** TODO finish updating zone stat procedure to match state/county
 
 GAP TRUE/FALSE naming, . . .
 
 
-**** TODO figure out where null values in NBCD are coming from
+*** TODO figure out where null values in NBCD are coming from
 
 
-*** repeat for states
+** repeat for states
 
-    
-#+begin_src R
-  
-  statsNbcdState <-
-    rawStateStats[, list( aldb= weighted.mean( aldb, n),
-                         aldb2= weighted.mean( aldb, n2),
-                         n= sum( n),
-                         n2= sum( n2),
-                         ha= sum(n) * 30^2 / 10^4,
-                         ha2= sum(n2) * 30^2 / 10^4),
-                  keyby= "state,nlcd,gap"] 
-  stateAreas <-
-    statsNbcdState[ , list( totHa= sum(ha)),
-                   keyby= "state"]
-  statsNbcdState <-
-    statsNbcdState[ stateAreas][, frac:=ha/totHa]
-   
-  statsNbcdState <-
-    rbind(
-      statsNbcdState[ !nlcd %in% as.character( c( 41, 42, 43, 90)),
-                      list( state, nlcd, gap, aldb, ha, frac)],
-      statsNbcdState[  nlcd %in% as.character( c( 41, 42, 43, 90)),
-                      list( state, nlcd, gap, aldb= aldb2, ha, frac)])
-  setkey( statsNbcdState, state, nlcd, gap)
-  
-  ## test
-  ## any( abs( statsNbcdState[, list( frac= sum(frac)), by= state][, frac] - 1) > 0.001)
-  
-  nbcdStateAldb <- 
-    data.table(
-      cast(
-        data= statsNbcdState,
-        formula= state ~ gap + nlcd,
-        value= "aldb",
-        ## subset= !is.na( aldb)
-        ),
-      key= "state")
-  
-  setnames(
-    nbcdStateAldb,
-    colnames( nbcdStateAldb),
-    str_replace(
-      str_replace(
-        colnames(nbcdStateAldb),
-        "TRUE_", "yes"),
-      "FALSE_", "no"))
-  
-  
-  nbcdStateAldbMeans <- 
-     data.table(
-       cast(
-         data=
-         statsNbcdState[, list( aldbAve= weighted.mean( aldb, ha)),
-                  by= c( "state", "gap")],
-         formula= state ~ gap,
-         value= "aldbAve",
-         subset= !is.na( aldbAve)),
-       key= "state")
-  
-  setnames(
-    nbcdStateAldbMeans,
-    c( "FALSE", "TRUE"),
-    c( "noAll", "yesAll"))
-  
-  nbcdStateGapFrac <-
-    data.table(
-      cast(
-        data= statsNbcdState,
-        formula= state ~ gap,
-        value= "frac",
-        fun.aggregate= sum,
-        ## subset= !is.na( aldb)
-        na.rm = TRUE),
-      key= "state")
-  
-  setnames(
-    nbcdStateGapFrac,
-    c( "FALSE", "TRUE"),
-    c( "noAllFr", "yesAllFr"))
-  
-  nbcdStateGapHa <-
-    data.table(
-      cast(
-        data= statsNbcdState,
-        formula= state ~ gap,
-        value= "ha",
-        fun.aggregate= sum,
-        ## subset= !is.na( aldb)
-        na.rm= TRUE),
-      key= "state")
-  
-  setnames(
-    nbcdStateGapHa,
-    c( "FALSE", "TRUE"),
-    c( "noAllHa", "yesAllHa"))
-  
-   nbcdStateFrac <- 
-    data.table(
-      cast(
-        data= statsNbcdState,
-        formula= state ~ gap + nlcd,
-        value= "frac",
-        ## subset= !is.na( aldb)
-        ),
-      key= "state")
-  
-  setnames(
-    nbcdStateFrac,
-    colnames( nbcdStateFrac)[ -1],
-    paste(
-      str_replace(
-        str_replace(
-          colnames( nbcdStateFrac)[ -1],
-          "TRUE_", "yes"),
-        "FALSE_", "no"),
-      "Fr", sep= ""))
-  
-  nbcdStateHa <- 
-    data.table(
-      cast(
-        data= statsNbcdState,
-        formula= state ~ gap + nlcd,
-        value= "ha",
-        ## subset= !is.na( aldb)
-        ),
-      key= "state")
-  
-  setnames(
-    nbcdStateHa,
-    colnames( nbcdStateHa)[ -1],
-    paste(
-      str_replace(
-        str_replace(
-          colnames( nbcdStateHa)[ -1],
-          "TRUE_", "yes"),
-        "FALSE_", "no"),
-      "Ha", sep= ""))
-   
-  nbcdState <-
-    nbcdStateAldb[ nbcdStateAldbMeans]
-  nbcdState <-
-    nbcdState[ nbcdStateGapFrac][ nbcdStateGapHa]
-  nbcdState <-
-    nbcdState[ nbcdStateFrac][ nbcdStateHa]
-  
-  setnames(
-    nbcdState,
-    "state", "fips")
-  
-  setcolorder(
-    nbcdState,
-    order( colnames( nbcdState)))
-  
-  nbcdStateChar <-
-    str_trim(
-      format.df(
-        nbcdState,
-        cdec= sapply(
-          colnames( nbcdState),
-          function( x) {
-            ifelse(
-              x == "fips", 0,
-              ifelse(
-                str_detect( x, "Ha$"), 1,
-                ifelse(
-                  str_detect( x, "Fr$"), 3,
-                  1)))
-          }),
-        numeric.dollar= FALSE,
-        na.blank= TRUE))
-  
-  write.csv(
-    nbcdStateChar,
-    row.names= FALSE,
-    file= "nbcdState.csv",
-    quote= FALSE)
-  
-  zip( "pad-us_nlcd_nbcd.zip", "nbcdState.csv")
-   
-  options(useFancyQuotes = FALSE)
-   cat(
-     sapply(
-       colnames( nbcdState),
-       function( x) {
-         dQuote(
-           ifelse(
-             x == "fips", "String(2)",
-             ifelse(
-               str_detect( x, "Ha$"),
-               "Real(10.1)",
-               ifelse(
-                 str_detect( x, "Fr$"),
-                 "Real(5.3)",
-                 "Real(5.1)"))))
-       }),
-     sep= ",",
-     file= "nbcdState.csvt")
-  
-  ogr2ogr <-
-    paste(
-      "ogr2ogr -overwrite -progress -sql",
-      sprintf(
-        "\"select %s from cusaStatesAea a",
-        paste( colnames( nbcdState), collapse= ",")),
-      "left join 'nbcdState.csv'.nbcdState b",
-      "on a.GEOID10 = b.fips\"",
-      "shp/nbcdState.shp shp/cusaStatesAea.shp")
-  
-  system( ogr2ogr)
-  
-  zip(
-    "pad-us_nlcd_nbcd.zip",
-    list.files(
-      path= "shp",
-      pattern= "^nbcdState",
-      full.names= TRUE))
-#+end_src
+*** calculate the average densities for original and modified pixel counts
 
-**** TODO figure out if is.na( aldb2) is correct
-    
+#+begin_src R :results output silent
 
-*** repeat for counties
-
-#+begin_src R
-  ## library( reshape)
-  ## library( Hmisc)
-  ## library( data.table)
-  ## library( stringr)
-  
-  statsNbcdCounty <-
-    rawCountyStats[, list(
-                       aldb= weighted.mean( aldb, n),
+statsNbcdState <-
+  rawStateStats[, list( aldb= weighted.mean( aldb, n),
                        aldb2= weighted.mean( aldb, n2),
                        n= sum( n),
                        n2= sum( n2),
                        ha= sum(n) * 30^2 / 10^4,
                        ha2= sum(n2) * 30^2 / 10^4),
-                   keyby= "state,county,nlcd,gap"]
-  countyAreas <-
-    statsNbcdCounty[, list( totHa= sum(ha)),
-                    keyby= c( "state", "county")]
-  statsNbcdCounty <-
-    statsNbcdCounty[ countyAreas][, frac:=ha/totHa]
-  
-  statsNbcdCounty <-
-    rbind(
-      statsNbcdCounty[ !nlcd %in% as.character( c( 41, 42, 43, 90)),
-                      list( state, county, nlcd, gap, aldb, ha, frac)],
-      statsNbcdCounty[  nlcd %in% as.character( c( 41, 42, 43, 90)),
-                      list( state, county, nlcd, gap, aldb= aldb2, ha, frac)])
-  setkey( statsNbcdCounty, state, county, nlcd, gap)
-  
-  ## test
-  ## any( abs( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1) > 0.001)
-  
-  zeroCarbonForestsIndex <-
-    with(
-      statsNbcdCounty,
-      nlcd %in% as.character( c( 41, 42, 43, 90)) & is.na( aldb))
-  
-  statsNbcdCounty <-
-    rbind(
-      statsNbcdCounty[ !zeroCarbonForestsIndex],
-      merge(
-        statsNbcdCounty[ zeroCarbonForestsIndex],
-        statsNbcdState,
-        all.x= TRUE)[, list( state, county, nlcd, gap, aldb= aldb.y, ha = ha.x, frac= frac.x)])
-  setkey( statsNbcdCounty, state, county, nlcd, gap)
-  
-  nbcdCountyAldb <- 
-      data.table(
-        cast(
-          data= statsNbcdCounty,
-          formula= state + county ~ gap + nlcd,
-          value= "aldb",
-          ## subset= !is.na( aldb)
-          ),
-        key= "state,county")
-  
-  setnames(
-    nbcdCountyAldb,
-    colnames(nbcdCountyAldb),
+                keyby= "state,nlcd,gap"] 
+stateAreas <-
+  statsNbcdState[ , list( totHa= sum(ha)),
+                 keyby= "state"]
+statsNbcdState <-
+  statsNbcdState[ stateAreas][, frac:=ha/totHa]
+
+#+end_src
+
+Some states have forests where all NBCD values were zero.  
+
+#+BEGIN_SRC R :results output org replace :exports both
+## statsNbcdState[ stateNames, nomatch=0][ is.na( aldb2)][
+##                               order( -ha),
+##                               list( usps, nlcd, gap, ha)]
+
+## suppressWarnings(
+##   ascii(
+##     cast(
+##       statsNbcdState[ stateNames, nomatch=0][ is.na( aldb2)],
+##       usps ~ nlcd,
+##       sum,
+##       value= "ha",
+##       margins= TRUE,
+##       fill= NA),
+##     digits= 0,
+##     include.rownames = FALSE))
+
+## ,
+##   colnames= c( "FIPS", "name", "region"))
+
+suppressWarnings(
+  ascii(
+    cast(
+      statsNbcdState[ stateNames, nomatch=0][ is.na( aldb2)],
+      gap + usps ~ nlcd,
+      sum,
+      value= "ha",
+      margins= TRUE,
+      fill= NA),
+    digits= 0,
+    include.rownames = FALSE))
+
+#+END_SRC
+
+#+results:
+#+BEGIN_ORG
+| gap   | usps  | 43      | 90     | (all)   |
+|-------+-------+---------+--------+---------|
+| FALSE | AZ    | 418     | 41418  | 41836   |
+| FALSE | CA    | 602269  | 59116  | 661385  |
+| FALSE | CO    |         | 153555 | 153555  |
+| FALSE | MT    | 10618   |        | 10618   |
+| FALSE | NM    | 6255    | 33295  | 39550   |
+| FALSE | NV    | 924     | 73571  | 74495   |
+| FALSE | OR    | 394996  |        | 394996  |
+| FALSE | WA    | 286592  |        | 286592  |
+| FALSE | (all) | 1302072 | 360956 | 1663028 |
+| TRUE  | AZ    | 11267   | 44313  | 55581   |
+| TRUE  | CA    | 416041  | 26084  | 442125  |
+| TRUE  | CO    |         | 128555 | 128555  |
+| TRUE  | MT    | 19429   |        | 19429   |
+| TRUE  | NM    | 18237   | 19361  | 37598   |
+| TRUE  | NV    | 9497    | 20714  | 30211   |
+| TRUE  | OR    | 243347  |        | 243347  |
+| TRUE  | WA    | 104410  |        | 104410  |
+| TRUE  | (all) | 822228  | 239028 | 1061256 |
+| (all) | (all) | 2124300 | 599983 | 2724284 |
+#+END_ORG
+
+To backfill those NLCD/GAP combinations we must calculate national averages.
+
+#+BEGIN_SRC R :results output org replace :exports both
+nbcdMean <-
+  statsNbcdState[ n != n2][, list(
+                    aldb= weighted.mean( aldb2, n, na.rm= TRUE)),
+                    keyby= "nlcd,gap"]
+
+ascii(
+  cast(
+    nbcdMean,
+    nlcd ~ gap,
+    value= "aldb"),
+  digits = 1,
+  include.rownames= FALSE)
+#+END_SRC
+
+#+results:
+#+BEGIN_ORG
+| nlcd | FALSE | TRUE  |
+|------+-------+-------|
+| 41   | 109.8 | 118.8 |
+| 42   | 103.3 | 120.5 |
+| 43   | 105.5 | 119.3 |
+| 90   | 98.7  | 93.1  |
+#+END_ORG
+
+*** COMMENT these plots show states with problem forests
+
+#+begin_src R :eval no
+
+ggplot(
+  statsNbcdState[ n != n2][ stateNames, nomatch= 0],
+  aes(    x= n2/n,
+          y= ha, ## aldb/aldb2,
+      label= usps)) +
+  geom_point() +
+  geom_text(
+    hjust= 0,
+    vjust= 0) +
+  facet_grid( nlcd ~ gap) +
+  scale_y_log10() +
+  scale_x_continuous( limits= c( 0.0, 0.8))
+
+
+ggplot(
+  statsNbcdState[ n != n2],
+  aes(    x= n2/n,
+          y= frac,
+      label= state)) +
+  geom_point() +
+  geom_text(
+    hjust= 0,
+    vjust= 0) +
+  facet_grid( nlcd ~ gap) +
+  scale_y_log10()+
+  scale_x_continuous( limits= c( 0.0, 0.8))
+
+ggplot(
+  statsNbcdState[ n != n2],
+  aes(
+    x= n2/n,
+    y= aldb/aldb2,
+    label= state)) +
+  geom_point(
+    aes(
+      size= frac)) +
+  geom_text(
+    hjust= 1.0,
+    vjust= 0) +
+  facet_grid( nlcd ~ gap) +
+  scale_x_continuous( limits= c( 0.0, 0.8)) +
+  scale_size(
+    limits= c(0.0, 0.3),
+    range= c( 5, 15))
+
+ggplot(
+  statsNbcdState[ n != n2],
+  aes(
+    x= n2/n,
+    y= frac,
+    label= state)) +
+  geom_point(
+    aes(
+      size= aldb/aldb2)) +
+  geom_text(
+    hjust= 1.0,
+    vjust= 0) +
+  facet_grid( nlcd ~ gap) +
+  scale_y_log10()+
+  scale_x_continuous( limits= c( 0.0, 0.8))
+
+
+
+#+end_src
+
+
+*** backfill the null state densities with national means
+
+#+begin_src R
+statsNbcdState <-
+  merge( statsNbcdState, nbcdMean, all.x= TRUE)
+statsNbcdState[ is.na( aldb2), aldb2 := aldb.y][, aldb.y := NULL]
+setkey( statsNbcdState, state, nlcd, gap)
+setnames( statsNbcdState, "aldb.x", "aldb")
+setcolorder( statsNbcdState, c( 3, 1, 2, 4:11))
+
+## test
+## any( abs( statsNbcdState[, list( frac= sum(frac)), by= state][, frac] - 1) > 0.001)
+
+
+write.csv(
+  statsNbcdState,
+  row.names= FALSE,
+  file= "pad-us_nlcd/nbcdStateSerial.csv",
+  quote= FALSE)
+
+zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdStateSerial.csv")
+
+#+end_src
+
+
+
+*** cross-tabulate the state data using backfilled densities
+
+
+#+begin_src R
+
+nbcdStateAldb <- 
+  data.table(
+    cast(
+      data= statsNbcdState,
+      formula= state ~ gap + nlcd,
+      value= "aldb2"),
+    key= "state")
+
+setnames(
+  nbcdStateAldb,
+  colnames( nbcdStateAldb),
+  str_replace(
+    str_replace(
+      colnames(nbcdStateAldb),
+      "TRUE_", "yes"),
+    "FALSE_", "no"))
+
+
+nbcdStateAldbMeans <- 
+  data.table(
+    cast(
+      data=
+      statsNbcdState[, list( aldbAve= weighted.mean( aldb2, ha)),
+                     by= c( "state", "gap")],
+      formula= state ~ gap,
+      value= "aldbAve"),
+    key= "state")
+
+setnames(
+  nbcdStateAldbMeans,
+  c( "FALSE", "TRUE"),
+  c( "noAll", "yesAll"))
+
+nbcdStateGapFrac <-
+  data.table(
+    cast(
+      data= statsNbcdState,
+      formula= state ~ gap,
+      value= "frac",
+      fun.aggregate= sum,
+      na.rm = TRUE),
+    key= "state")
+
+setnames(
+  nbcdStateGapFrac,
+  c( "FALSE", "TRUE"),
+  c( "noAllFr", "yesAllFr"))
+
+nbcdStateGapHa <-
+  data.table(
+    cast(
+      data= statsNbcdState,
+      formula= state ~ gap,
+      value= "ha",
+      fun.aggregate= sum,
+      na.rm= TRUE),
+    key= "state")
+
+setnames(
+  nbcdStateGapHa,
+  c( "FALSE", "TRUE"),
+  c( "noAllHa", "yesAllHa"))
+
+nbcdStateFrac <- 
+  data.table(
+    cast(
+      data= statsNbcdState,
+      formula= state ~ gap + nlcd,
+      value= "frac"),
+    key= "state")
+
+setnames(
+  nbcdStateFrac,
+  colnames( nbcdStateFrac)[ -1],
+  paste(
     str_replace(
       str_replace(
-        colnames(nbcdCountyAldb),
+        colnames( nbcdStateFrac)[ -1],
         "TRUE_", "yes"),
-      "FALSE_", "no"))
-  
-  nbcdCountyAldbMeans <- 
-    data.table(
-      cast(
-        data=
-        statsNbcdCounty[, list( aldbAve= weighted.mean( aldb, ha,
-                                  na.rm= TRUE)),
-                 by= c( "state", "county", "gap")],
-        formula= state + county ~ gap,
-        value= "aldbAve"),
-        ## subset= !is.na( aldbAve)),
-      key= "state,county")
-  
-  setnames(
-    nbcdCountyAldbMeans,
-    c( "FALSE", "TRUE"),
-    c( "noAll", "yesAll"))
-  
-  nbcdCountyGapFrac <-
-    data.table(
-      cast(
-        data= statsNbcdCounty,
-        formula= state + county ~ gap,
-        value= "frac",
-        fun.aggregate= sum,
-        ## subset= !is.na( aldb)
-        na.rm= TRUE),
-      key= "state,county")
-  
-  setnames(
-    nbcdCountyGapFrac,
-    c( "FALSE", "TRUE"),
-    c( "noAllFr", "yesAllFr"))
-  
-  nbcdCountyGapHa <-
-    data.table(
-      cast(
-        data= statsNbcdCounty,
-        formula= state + county ~ gap,
-        value= "ha",
-        fun.aggregate= sum,
-        ## subset= !is.na( aldb)
-        na.rm= TRUE),
-      key= "state,county")
-  
-  setnames(
-    nbcdCountyGapHa,
-    c( "FALSE", "TRUE"),
-    c( "noAllHa", "yesAllHa"))
-  
-  nbcdCountyFrac <- 
-    data.table(
-      cast(
-        data= statsNbcdCounty,
-        formula= state + county ~ gap + nlcd,
-        value= "frac",
-        ## subset= !is.na( aldb)
-        ),
-      key= "state,county")
-  
-  setnames(
-    nbcdCountyFrac,
-    colnames( nbcdCountyFrac)[ -(1:2)],
-    paste(
+      "FALSE_", "no"),
+    "Fr", sep= ""))
+
+nbcdStateHa <- 
+  data.table(
+    cast(
+      data= statsNbcdState,
+      formula= state ~ gap + nlcd,
+      value= "ha"),
+    key= "state")
+
+setnames(
+  nbcdStateHa,
+  colnames( nbcdStateHa)[ -1],
+  paste(
+    str_replace(
       str_replace(
-        str_replace(
-          colnames( nbcdCountyFrac)[ -(1:2)],
-          "TRUE_", "yes"),
-        "FALSE_", "no"),
-      "Fr", sep= ""))
-  
-  nbcdCountyHa <- 
-    data.table(
-      cast(
-        data= statsNbcdCounty,
-        formula= state + county ~ gap + nlcd,
-        value= "ha",
-        ## subset= !is.na( aldb)
-        ),
-      key= "state,county")
-  
-  setnames(
-    nbcdCountyHa,
-    colnames( nbcdCountyHa)[ -(1:2)],
-    paste(
-      str_replace(
-        str_replace(
-          colnames( nbcdCountyHa)[ -(1:2)],
-          "TRUE_", "yes"),
-        "FALSE_", "no"),
-      "Ha", sep= ""))
-  
-   
-  nbcdCounty <-
-    nbcdCountyAldb[ nbcdCountyAldbMeans]
-  nbcdCounty <-
-    nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
-  nbcdCounty <-
-    nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
-  
-  nbcdCounty <-
-    nbcdCounty[, fips := paste( state, county, sep= "")]
-  nbcdCounty <-
-    nbcdCounty[, state := NULL][, county := NULL]
-  setkey( nbcdCounty, fips)
-  setcolorder( nbcdCounty, order( colnames( nbcdCounty)))
-  
-  nbcdCountyChar <-
-    str_trim(
-      format.df(
-        nbcdCounty,
-        cdec= sapply(
-          colnames( nbcdCounty),
-          function( x)
+        colnames( nbcdStateHa)[ -1],
+        "TRUE_", "yes"),
+      "FALSE_", "no"),
+    "Ha", sep= ""))
+
+nbcdState <-
+  nbcdStateAldb[ nbcdStateAldbMeans]
+nbcdState <-
+  nbcdState[ nbcdStateGapFrac][ nbcdStateGapHa]
+nbcdState <-
+  nbcdState[ nbcdStateFrac][ nbcdStateHa]
+
+setnames(
+  nbcdState,
+  "state", "fips")
+
+setcolorder(
+  nbcdState,
+  order( colnames( nbcdState)))
+
+nbcdStateChar <-
+  str_trim(
+    format.df(
+      nbcdState,
+      cdec= sapply(
+        colnames( nbcdState),
+        function( x) {
           ifelse(
             x == "fips", 0,
             ifelse(
               str_detect( x, "Ha$"), 1,
               ifelse(
                 str_detect( x, "Fr$"), 3,
-                1)))),
-        numeric.dollar= FALSE,
-        na.blank= TRUE))
-  
-  write.csv(
-    nbcdCountyChar,
-    row.names= FALSE,
-    file= "nbcdCounty.csv",
-    quote= FALSE)
-  
-  zip( "pad-us_nlcd_nbcd.zip", "nbcdCounty.csv")
-   
-  options(useFancyQuotes = FALSE)
-   cat(
-     sapply(
-       colnames( nbcdCounty),
-       function( x) {
-         dQuote(
-           ifelse(
-             x == "fips", "String(5)",
-             ifelse(
-               str_detect( x, "Ha$"),
-               "Real(10.1)",
-               ifelse(
-                 str_detect( x, "Fr$"),
-                 "Real(5.3)",
-                 "Real(5.1)"))))
-       }),
-     sep= ",",
-     file= "nbcdCounty.csvt")
-  
-  ogr2ogr <-
-    paste(
-      "ogr2ogr -overwrite -progress -sql",
-      sprintf(
-        "\"select %s from cusaCountiesAea a",
-        paste( colnames( nbcdCounty), collapse= ",")),
-      "left join 'nbcdCounty.csv'.nbcdCounty b",
-      "on a.GEOID10 = b.fips\"",
-      "shp/nbcdCounty.shp shp/cusaCountiesAea.shp")
-  
-  system( ogr2ogr)
-  
-  zip(
-    "pad-us_nlcd_nbcd.zip",
-    list.files(
-      path= "shp",
-      pattern= "^nbcdCounty\\.",
-      full.names= TRUE))
-  
-  
+                1)))
+        }),
+      numeric.dollar= FALSE,
+      na.blank= TRUE))
+
+write.csv(
+  nbcdStateChar,
+  row.names= FALSE,
+  file= "pad-us_nlcd/nbcdState.csv",
+  quote= FALSE)
+
+zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdState.csv")
+
+options(useFancyQuotes = FALSE)
+cat(
+  sapply(
+    colnames( nbcdState),
+    function( x) {
+      dQuote(
+        ifelse(
+          x == "fips", "String(2)",
+          ifelse(
+            str_detect( x, "Ha$"),
+            "Real(10.1)",
+            ifelse(
+              str_detect( x, "Fr$"),
+              "Real(5.3)",
+              "Real(5.1)"))))
+    }),
+  sep= ",",
+  file= "pad-us_nlcd/nbcdState.csvt")
+options(useFancyQuotes = TRUE)
+
+ogr2ogr <-
+  paste(
+    "ogr2ogr -overwrite -progress -sql",
+    sprintf(
+      "\"select %s from cusaStatesAea a",
+      paste( colnames( nbcdState), collapse= ",")),
+    "left join 'nbcdState.csv'.nbcdState b",
+    "on a.GEOID10 = b.fips\"",
+    "pad-us_nlcd/nbcdState.shp shp/cusaStatesAea.shp")
+
+system( ogr2ogr)
+
+zip(
+  "pad-us_nlcd.zip",
+  list.files(
+    path= "pad-us_nlcd",
+    pattern= "^nbcdState\\.[a-z]{3}",
+    full.names= TRUE))
 #+end_src
 
 
-*** Plots
+*** COMMENT DONE figure out if is.na( aldb2) is correct
+
+   
+
+** repeat for counties
+
+#+begin_src R
+## library( reshape)
+## library( Hmisc)
+## library( data.table)
+## library( stringr)
+
+statsNbcdCounty <-
+  rawCountyStats[, list(
+    aldb= weighted.mean( aldb, n),
+    aldb2= weighted.mean( aldb, n2),
+    n= sum( n),
+    n2= sum( n2),
+    ha= sum(n) * 30^2 / 10^4,
+    ha2= sum(n2) * 30^2 / 10^4),
+                 keyby= "state,county,nlcd,gap"]
+countyAreas <-
+  statsNbcdCounty[, list( totHa= sum(ha)),
+                  keyby= c( "state", "county")]
+statsNbcdCounty <-
+  statsNbcdCounty[ countyAreas][, frac:=ha/totHa]
+  
+statsNbcdCounty <-
+  merge(
+    statsNbcdCounty,
+    statsNbcdState[, list( state, nlcd, gap, aldb2, n2)],
+    by= c( "state", "nlcd", "gap"),
+    all.x= TRUE)
+
+statsNbcdCounty[, fill := as.character(NA)]
+
+statsNbcdCounty[ n2.x == 0 & n2.y == 0, fill := "cUSA"]
+statsNbcdCounty[ n2.x == 0 & n2.y != 0, fill := "state"]
+
+statsNbcdCounty[ is.na( aldb2.x), aldb2.x := aldb2.y]
+statsNbcdCounty[, aldb2.y := NULL]
+statsNbcdCounty[,    n2.y := NULL]
+statsNbcdCounty[,   totHa := NULL]
+
+setkey( statsNbcdCounty, state, county, nlcd, gap)
+setnames(
+  statsNbcdCounty,
+  c( "aldb2.x", "n2.x"),
+  c( "aldb2",   "n2"))
+
+setcolorder(
+  statsNbcdCounty,
+  c( "state", "county", "nlcd", "gap",
+    "aldb", "aldb2", "n", "n2", "ha", "ha2",
+    "frac", "fill"))
+
+## test
+## any( abs( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1) > 0.001)
+
+write.csv(
+  statsNbcdCounty,
+  row.names= FALSE,
+  file= "pad-us_nlcd/nbcdCountySerial.csv",
+  quote= FALSE)
+
+zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCountySerial.csv")
+
+nbcdCountyAldb <- 
+  data.table(
+    cast(
+      data= statsNbcdCounty,
+      formula= state + county ~ gap + nlcd,
+      value= "aldb2"),
+    key= "state,county")
+
+setnames(
+  nbcdCountyAldb,
+  colnames(nbcdCountyAldb),
+  str_replace(
+    str_replace(
+      colnames(nbcdCountyAldb),
+      "TRUE_", "yes"),
+    "FALSE_", "no"))
+
+nbcdCountyAldbMeans <- 
+  data.table(
+    cast(
+      data=
+      statsNbcdCounty[, list( aldbAve= weighted.mean( aldb2, ha,
+                                na.rm= TRUE)),
+                      by= c( "state", "county", "gap")],
+      formula= state + county ~ gap,
+      value= "aldbAve"),
+    key= "state,county")
+
+setnames(
+  nbcdCountyAldbMeans,
+  c( "FALSE", "TRUE"),
+  c( "noAll", "yesAll"))
+
+nbcdCountyGapFrac <-
+  data.table(
+    cast(
+      data= statsNbcdCounty,
+      formula= state + county ~ gap,
+      value= "frac",
+      fun.aggregate= sum,
+      na.rm= TRUE),
+    key= "state,county")
+
+setnames(
+  nbcdCountyGapFrac,
+  c( "FALSE", "TRUE"),
+  c( "noAllFr", "yesAllFr"))
+
+nbcdCountyGapHa <-
+  data.table(
+    cast(
+      data= statsNbcdCounty,
+      formula= state + county ~ gap,
+      value= "ha",
+      fun.aggregate= sum,
+      na.rm= TRUE),
+    key= "state,county")
+
+setnames(
+  nbcdCountyGapHa,
+  c( "FALSE", "TRUE"),
+  c( "noAllHa", "yesAllHa"))
+
+nbcdCountyFrac <- 
+  data.table(
+    cast(
+      data= statsNbcdCounty,
+      formula= state + county ~ gap + nlcd,
+      value= "frac"),
+    key= "state,county")
+
+setnames(
+  nbcdCountyFrac,
+  colnames( nbcdCountyFrac)[ -(1:2)],
+  paste(
+    str_replace(
+      str_replace(
+        colnames( nbcdCountyFrac)[ -(1:2)],
+        "TRUE_", "yes"),
+      "FALSE_", "no"),
+    "Fr", sep= ""))
+
+nbcdCountyHa <- 
+  data.table(
+    cast(
+      data= statsNbcdCounty,
+      formula= state + county ~ gap + nlcd,
+      value= "ha",),
+    key= "state,county")
+
+setnames(
+  nbcdCountyHa,
+  colnames( nbcdCountyHa)[ -(1:2)],
+  paste(
+    str_replace(
+      str_replace(
+        colnames( nbcdCountyHa)[ -(1:2)],
+        "TRUE_", "yes"),
+      "FALSE_", "no"),
+    "Ha", sep= ""))
+
+
+nbcdCounty <-
+  nbcdCountyAldb[ nbcdCountyAldbMeans]
+nbcdCounty <-
+  nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
+nbcdCounty <-
+  nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
+
+nbcdCounty <-
+  nbcdCounty[, fips := paste( state, county, sep= "")]
+nbcdCounty <-
+  nbcdCounty[, state := NULL][, county := NULL]
+setkey( nbcdCounty, fips)
+setcolorder( nbcdCounty, order( colnames( nbcdCounty)))
+
+nbcdCountyChar <-
+  str_trim(
+    format.df(
+      nbcdCounty,
+      cdec= sapply(
+        colnames( nbcdCounty),
+        function( x)
+        ifelse(
+          x == "fips", 0,
+          ifelse(
+            str_detect( x, "Ha$"), 1,
+            ifelse(
+              str_detect( x, "Fr$"), 3,
+              1)))),
+      numeric.dollar= FALSE,
+      na.blank= TRUE))
+
+write.csv(
+  nbcdCountyChar,
+  row.names= FALSE,
+  file= "pad-us_nlcd/nbcdCounty.csv",
+  quote= FALSE)
+
+## zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCounty.csv")
+
+options(useFancyQuotes = FALSE)
+cat(
+  sapply(
+    colnames( nbcdCounty),
+    function( x) {
+      dQuote(
+        ifelse(
+          x == "fips", "String(5)",
+          ifelse(
+            str_detect( x, "Ha$"),
+            "Real(10.1)",
+            ifelse(
+              str_detect( x, "Fr$"),
+              "Real(5.3)",
+              "Real(5.1)"))))
+    }),
+  sep= ",",
+  file= "pad-us_nlcd/nbcdCounty.csvt")
+options(useFancyQuotes = TRUE)
+
+ogr2ogr <-
+  paste(
+    "ogr2ogr -overwrite -progress -sql",
+    sprintf(
+      "\"select %s from cusaCountiesAea a",
+      paste( colnames( nbcdCounty), collapse= ",")),
+    "left join 'nbcdCounty.csv'.nbcdCounty b",
+    "on a.GEOID10 = b.fips\"",
+    "pad-us_nlcd/nbcdCounty.shp shp/cusaCountiesAea.shp")
+
+system( ogr2ogr)
+
+zip(
+  "pad-us_nlcd.zip",
+  list.files(
+    path= "pad-us_nlcd",
+    pattern= "^nbcdCounty\\.[a-z]{3}$",
+    full.names= TRUE))
+
+
+#+end_src
+
+
+** Plots
 
 
 #+begin_src R
@@ -1575,3 +1697,4 @@ GAP TRUE/FALSE naming, . . .
       labels= percent)
   
 #+end_src
+   

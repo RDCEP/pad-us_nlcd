@@ -24,6 +24,8 @@ nlcd01v1URL = 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcd2001v1&FNA
 
 nlcd01v1:
 	-wget -nc $(nlcd01v1URL) -O nlcd2001_landcover_mosaic_2-20-07.zip
+	unzip nlcd2001_landcover_mosaic_2-20-07.zip -x 'nlcd2001_landcover_mosaic_2-20-07/nlcd_2001_landcover_metadata/*'
+	gdalinfo nlcd2001_landcover_mosaic_2-20-07/nlcd2001_mosaic_2-20-07.img > nlcd2001_landcover_mosaic_2-20-07/nlcd2001_mosaic_2-20-07.gdalinfo
 
 ak:
 	-wget -nc 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcdak&FNAME=AK_NLCD_2001_land_cover_3-13-08.zip' -O AK_NLCD_2001_land_cover_3-13-08.zip

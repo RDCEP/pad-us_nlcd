@@ -1,59 +1,35 @@
-#!/usr/bin/make -f -I scripts
+#!/usr/bin/make -f -I src
 
-vpath %.R scripts
-vpath %.tif gdal
-vpath %.img gdal
+vpath %.R src
+vpath %.tif data
+vpath %.img data
 
-.PHONY: cusa ak hi pr small nbcdZones counties nbcd 
+.PHONY: cusa pad-us ak hi pr small nbcdZones counties nbcd 
 
-tangle: pad-us_nlcd.org pad-us_nlcd.el Makefile
-	emacs --quick --batch -l pad-us_nlcd.el # 2&>1 | grep tangle
-	rsync -arq tangle/ scripts 
-	chmod u+x scripts/*.sh
-	touch tangle
+pad-us:
+        $(MAKE) --directory=$@ cusa
 
-scripts/grid5minWorld.R: tangle
+tangle: pad-us_nlcd.org tangle.el Makefile
+	emacs --quick --batch -l tangle.el 2>&1 \
+          | tee log/tangle.log \
+          | grep ^tangled
+	rsync -arq tangled/ src 
+	touch $@
 
-# gdal/grid5minWorld.tif: scripts/grid5minWorld.R
-# 	Rscript --vanilla $<
+src/pad-us_nlcd.mk: tangle
 
-# gdal/grid5minAeaCUSA.img: gdal/grid5minWorld.tif
-# 	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" -te -2493045 177285 2342655 3310005 -tr 30 30 -co "COMPRESSED=YES" $< $@
+src/*.R src/*.sh: tangle
 
-pad-us_nlcd.make: tangle
+data/grid5minWorld.tif: init.R
+	Rscript --vanilla $<
 
-include pad-us_nlcd.make
 
-cusa: gdal/grid5minAeaCUSA.img
+-include pad-us_nlcd.mk
 
-ak: world5min.tif
-	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=55 +lat_2=65 +lat_0=50 +lon_0=-154 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" -te -2232345 344805 1494735 2380125 -tr 30 30 -co "COMPRESSED=YES" world5min.tif aeaGrid5minAlaska.img
-
-pr: world5min.tif
-	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" -te 3092415 -78975 3345225 59415 -tr 30 30 -co "COMPRESSED=YES" world5min.tif aeaGrid5minPuertoRico.img
-
-hi: world5min.tif
-	gdalwarp -overwrite -of HFA -t_srs "+proj=aea +lat_1=8.000000000000002 +lat_2=18 +lat_0=3 +lon_0=-157 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" -te -345945 1753875 237225 2132415 -tr 30 30 -co "COMPRESSED=YES" world5min.tif aeaGrid5minHawaii.img
-
-all: cusa ak pr hi
-
-grass: grassPuertoRico grassHawaii grassAlaska grasscUSA
-
-grassPuertoRico:
-	./grassPuertoRico.sh
-
-grassHawaii:
-	./grassHawaii.sh
-
-grassAlaska:
-	./grassAlaska.sh
-
-grasscUSA:
-	./grasscUSA.sh
 
 nbcd: grasscUSA
 	gdalwarp -overwrite -t_srs '+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +no_defs +a=6378137 +rf=298.257222101 +to_meter=1' -of VRT -srcnodata 65536 -dstnodata 65536 nbcd/nbcd.vrt nbcdWarped.vrt
-	scripts/grassNbcd.sh
+	src/grassNbcd.sh
 
 counties:
 	wget -nc -P shp ftp://ftp2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_us_county10.zip

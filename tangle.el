@@ -14,4 +14,5 @@
       (org-src-preserve-indentation 'true)
       (ess-ask-for-ess-directory nil))
   (progn (find-file "pad-us_nlcd.org")
+	 (org-babel-execute-buffer)
          (org-babel-tangle)))
