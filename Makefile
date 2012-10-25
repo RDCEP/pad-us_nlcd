@@ -28,7 +28,6 @@ data/grid5minWorld.tif: init.R
 
 
 nbcd: grasscUSA
-	gdalwarp -overwrite -t_srs '+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +no_defs +a=6378137 +rf=298.257222101 +to_meter=1' -of VRT -srcnodata 65536 -dstnodata 65536 nbcd/nbcd.vrt nbcdWarped.vrt
 	src/grassNbcd.sh
 
 counties:

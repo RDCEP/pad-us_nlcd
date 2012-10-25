@@ -294,13 +294,13 @@ export GIS_LOCK=$$
 # path to GRASS settings file
 export GISRC=./.grassrc6
 
-g.gisenv set=LOCATION_NAME=\$GIS_LOCK
-eval \$(g.gisenv)
-mkdir -p \$GISDBASE/\$GIS_LOCK
+g.gisenv set=LOCATION_NAME=$GIS_LOCK
+eval $(g.gisenv)
+mkdir -p $GISDBASE/$GIS_LOCK
 g.mapset -c mapset=temp
 r.in.gdal in=aeaGrid5min${LOCATION}.img out=grid_5min location=${LOCATION}
 g.mapset mapset=PERMANENT location=${LOCATION}
-rm -rf \$GISDBASE/\$GIS_LOCK/temp
+rm -rf $GISDBASE/$GIS_LOCK/temp
 r.in.gdal input=pad-us/data/PADUS1_2_${LOCATION}_GAP.tif output=gap
 #+END_SRC
 
@@ -407,6 +407,7 @@ NLCD=Nlcd06
 
 * TODO ingest the NBCD data and retabulate
 
+  
 * aggregate the results
    :PROPERTIES:
    :eval:     no
@@ -679,8 +680,53 @@ rawStateStats <-
 
 #+end_src
 
+Show the low-density forests that we intend to backfill.
 
-** by NBCD mapping zones
+
+#+NAME: forestHist
+#+BEGIN_SRC R :results output graphics :exports both :results replace :file pad-us_nlcd/images/forestHist.png
+
+qplot(
+  data= rawCountyStats[ nlcd %in% as.character( c(41:43, 90))],
+  x= aldb,
+  weight= n,
+  binwidth= 5,
+  xlim= c( 0, 200),
+  geom= "histogram", 
+  group= gap,
+  fill= gap,
+  position= "dodge",
+  ## position= "stack",
+  facets= nlcd ~ .)
+
+#+END_SRC
+
+#+results: forestHist
+[[file:pad-us_nlcd/images/forestHist.png]]
+
+
+#+NAME: forestHistDetail
+#+BEGIN_SRC R :results output graphics :exports both :results replace :file pad-us_nlcd/images/forestHistDetail.png
+
+qplot(
+  data= rawCountyStats[ nlcd %in% as.character( c(41:43, 90))],
+  x= aldb,
+  weight= n,
+  binwidth= 1,
+  xlim= c( 0, 20),
+  geom= "histogram", 
+  group= gap,
+  fill= gap,
+  position= "dodge",
+  ## position= "stack",
+  facets= nlcd ~ .)
+
+#+END_SRC
+
+#+results:
+[[file:pad-us_nlcd/images/forestHistDetail.png]]
+
+** COMMENT by NBCD mapping zones
   
 #+begin_src R
   library( reshape)
@@ -1574,127 +1620,136 @@ zip(
 
 
 #+begin_src R
-  
-  library( ggplot2)
-  library( scales)
-  
-  totalTonnes <-
-    statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
-                    keyby= "gap,nlcd"]
-  
-  totalTonnes[, labelY := aldb/2 + c(0, cumsum( aldb)[-length( aldb)])]
-  
-  totalTonnes[, pct := round( aldb / sum( aldb) *100, 1)]
-  totalTonnes[, label := ifelse( pct >= 0.5,
-                  sprintf( "%s, %3.1f%%", nlcd, pct), "")]
-  
-  totalTonnes[, label := sprintf( "%s, %d%%", nlcd, pct)]
-  
-  
-  
-  totalTonnes <-
-    statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
-                    keyby= "nlcd,gap"]
-  totalTonnes <-
-    totalTonnes[, frac := aldb / sum( aldb)]
-  
-  nlcdColors <-
-    c(
-      "11" = "#5475A8",
-      "12" = "#FFFFFF",
-      "21" = "#E8D1D1",
-      "22" = "#E29E8C",
-      "23" = "#FF0000",
-      "24" = "#B50000",
-      "31" = "#D2CDC0",
-      "41" = "#85C77E",
-      "42" = "#38814E",
-      "43" = "#D4E7B0",
-      "52" = "#DCCA8F",
-      "71" = "#FDE9AA",
-      "81" = "#FBF65D",
-      "82" = "#CA9146",
-      "90" = "#C8E6F8",
-      "95" = "#64B3D5")
-  
-  nlcdCovers <-
-    c(
-      "11" = "water",
-      "12" = "ice",
-      "21" = "dev open",
-      "22" = "dev low",
-      "23" = "dev med",
-      "24" = "dev high",
-      "31" = "barren",
-      "41" = "deciduous",
-      "42" = "evergreen",
-      "43" = "mixed",
-      "52" = "shrub",
-      "71" = "grass",
-      "81" = "pasture",
-      "82" = "crop",
-      "90" = "woody wet",
-      "95" = "wetland")
-  
-  nlcdMeta <-
-    data.table(
-      nlcd= factor( names( nlcdColors)),
-      color= nlcdColors,
-      cover= nlcdCovers,
-      key= "nlcd")
-  
-  totalTonnes[, list( gap, nlcd,
-                     frac = sprintf( "%5.4f", frac)),
-              key= "nlcd"][ nlcdMeta]
-  
-  totalTonnes <-
-    totalTonnes[, nlcd := reorder( factor(nlcd), frac, max)]
-  setkey( totalTonnes, nlcd)
-  
-  with( totalTonnes, reorder( factor(nlcd), frac, max))
-  
-  
-  ( massFracPlot <-
-   ggplot(
-     totalTonnes,
-     aes(
-       x= nlcd,
-       y= frac,
-       color= gap )) +
-   geom_point(
-     size= 4) +
-   scale_x_discrete(
-     name= "NLCD 2001 v1", ## ) +
-     labels= nlcdMeta[ J( levels( totalTonnes$nlcd))][, cover]) +
-   ylab( "Total mass fraction") +
-   scale_color_manual(
-     values= c( ## "#8C510A",
-       "#D8B365", ## 0xF6E8C3; 0xC7EAE5;
-       "#5AB4AC" ## "#01665E"
-       )) + 
-   coord_flip() +
-   labs( colour= "Protected") +
-   theme_bw())
-  
-   
-  massFracPlot +
-    scale_y_log10(
-      limits= c(0.003, 0.35),
-      breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
-      labels= percent)
-  
-  massFracPlot %+%
-    as.data.frame( totalTonnes[ frac > 0.003]) +
-    scale_x_discrete(
-      ## breaks= nlcdCovers[ as.character( totalTonnes[ frac > 0.003]$nlcd)],
-      labels= nlcdCovers[ as.character( totalTonnes[ frac > 0.003]$nlcd),
-        drop= TRUE])
-  
-  last_plot() +
-    scale_y_log10(
-      limits= c(0.003, 0.35),
-      breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
-      labels= percent)
-  
+
+library( ggplot2)
+library( scales)
+
+totalTonnes <-
+  statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
+                  keyby= "gap,nlcd"]
+
+totalTonnes[, labelY := aldb/2 + c(0, cumsum( aldb)[-length( aldb)])]
+
+totalTonnes[, pct := round( aldb / sum( aldb) *100, 1)]
+totalTonnes[, label := ifelse( pct >= 0.5,
+                sprintf( "%s, %3.1f%%", nlcd, pct), "")]
+
+totalTonnes[, label := sprintf( "%s, %d%%", nlcd, pct)]
+
+
+
+totalTonnes <-
+  statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
+                  keyby= "nlcd,gap"]
+totalTonnes <-
+  totalTonnes[, frac := aldb / sum( aldb)]
+
+nlcdColors <-
+  c(
+    "11" = "#5475A8",
+    "12" = "#FFFFFF",
+    "21" = "#E8D1D1",
+    "22" = "#E29E8C",
+    "23" = "#FF0000",
+    "24" = "#B50000",
+    "31" = "#D2CDC0",
+    "41" = "#85C77E",
+    "42" = "#38814E",
+    "43" = "#D4E7B0",
+    "52" = "#DCCA8F",
+    "71" = "#FDE9AA",
+    "81" = "#FBF65D",
+    "82" = "#CA9146",
+    "90" = "#C8E6F8",
+    "95" = "#64B3D5")
+
+nlcdCovers <-
+  c(
+    "11" = "water",
+    "12" = "ice",
+    "21" = "dev open",
+    "22" = "dev low",
+    "23" = "dev med",
+    "24" = "dev high",
+    "31" = "barren",
+    "41" = "deciduous",
+    "42" = "evergreen",
+    "43" = "mixed",
+    "52" = "shrub",
+    "71" = "grass",
+    "81" = "pasture",
+    "82" = "crop",
+    "90" = "woody wet",
+    "95" = "wetland")
+
+nlcdMeta <-
+  data.table(
+    nlcd= factor( names( nlcdColors)),
+    color= nlcdColors,
+    cover= nlcdCovers,
+    key= "nlcd")
+
+totalTonnes[, list( gap, nlcd,
+                   frac = sprintf( "%5.4f", frac)),
+            key= "nlcd"][ nlcdMeta]
+
+totalTonnes <-
+  totalTonnes[, nlcd := reorder( factor(nlcd), frac, max)]
+setkey( totalTonnes, nlcd)
+
+with( totalTonnes, reorder( factor(nlcd), frac, max))
+
+
+( massFracPlot <-
+ ggplot(
+   totalTonnes,
+   aes(
+     x= nlcd,
+     y= frac,
+     color= gap )) +
+ geom_point(
+   size= 4) +
+ scale_x_discrete(
+   name= "NLCD 2001 v1", ## ) +
+   labels= nlcdMeta[ J( levels( totalTonnes$nlcd))][, cover]) +
+ ylab( "Total mass fraction") +
+ scale_color_manual(
+   values= c( ## "#8C510A",
+     "#D8B365", ## 0xF6E8C3; 0xC7EAE5;
+     "#5AB4AC" ## "#01665E"
+     )) + 
+ coord_flip() +
+ labs( colour= "Protected") +
+ theme_bw())
+
+
+massFracPlot +
+  scale_y_log10(
+    limits= c(0.003, 0.35),
+    breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
+    labels= percent)
+
+last_plot() +
+  scale_y_log10(
+    limits= c(0.003, 0.35),
+    breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
+    labels= percent)
+
 #+end_src
    
+
+#+BEGIN_SRC R :results output graphics :exports both :results replace :file pad-us_nlcd/images/massFracPlot.png
+
+suppressWarnings(
+  massFracPlot %+%
+  as.data.frame( totalTonnes[ frac > 0.003]) +
+  scale_x_discrete(
+    ## breaks= nlcdCovers[ as.character( totalTonnes[ frac > 0.003]$nlcd)],
+    labels= nlcdCovers[ as.character( totalTonnes[ frac > 0.003]$nlcd),
+      drop= TRUE]))
+
+#+END_SRC
+
+#+results:
+[[file:pad-us_nlcd/images/massFracPlot.png]]
+
