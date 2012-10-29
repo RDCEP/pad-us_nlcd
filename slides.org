@@ -1,0 +1,85 @@
+#+TITLE:     Carbon Inventory Overview
+#+AUTHOR:    Neil Best
+#+EMAIL:     nbest@ci.uchicago.edu
+#+DATE:      2012-10-29 Mon
+#+DESCRIPTION:
+#+KEYWORDS:
+#+LANGUAGE:  en
+#+OPTIONS:   H:3 num:t toc:t \n:nil @:t ::t |:t ^:t -:t f:t *:t <:t
+#+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t pri:nil tags:not-in-toc
+#+INFOJS_OPT: view:nil toc:nil ltoc:t mouse:underline buttons:0 path:http://orgmode.org/org-info.js
+#+EXPORT_SELECT_TAGS: export
+#+EXPORT_EXCLUDE_TAGS: noexport
+#+LINK_UP:   
+#+LINK_HOME: 
+#+XSLT:
+
+#+startup: beamer
+#+LaTeX_CLASS: beamer
+
+#+BEAMER_FRAME_LEVEL: 2
+
+#+COLUMNS: %40ITEM %10BEAMER_env(Env) %9BEAMER_envargs(Env Args) %4BEAMER_col(Col) %10BEAMER_extra(Extra)
+
+
+* Datasets
+
+** National Landcover Database (NLCD)
+
+   #+CAPTION: NLCD 2001 v1
+   #+LABEL: fig:nlcd
+   [[file:pad-us_nlcd/images/nlcd.png]]
+
+   Categorical raster image, 30m resolution
+
+** Protected Areas Database of the United States (PAD-US)
+
+   #+CAPTION: PAD-US v1.2
+   #+LABEL: fig:pad-us
+   [[file:pad-us_nlcd/images/gapMap.png]]
+
+   Database of polygons with metadata
+
+
+** National Biomass and Carbon Dataset (NBCD)
+
+   #+CAPTION: NBCD v2
+   #+LABEL: fig:nbcd
+   [[file:pad-us_nlcd/images/nbcd.png]]
+
+   Estimate of biomass/carbon density (t/ha) modeled using canopy
+   density and basal area-weighted height
+
+* Aggregation
+
+** Area Fraction
+
+   #+CAPTION: All protected areas
+   #+LABEL: fig:area
+   [[file:pad-us_nlcd/images/gapMapChoro.png]]
+
+   Area fraction of all protected areas by county in roughly 10% intervals
+
+** Average Carbon Density
+   
+   #+CAPTION: Above-ground live dry biomass (ALDB) by quantiles
+   #+LABEL: fig:density
+   [[file:pad-us_nlcd/images/aldbQuantiles.png]]
+   
+   Average ALDB density across all covers.  Maximum is 287.6 t/ha.
+
+
+* Hybridization
+
+** Area Fraction
+
+   #+CAPTION: Relative areas by class and protection status.
+   [[file:pad-us_nlcd/images/areaFracPlot.png]]
+
+** Mass Fraction
+
+   #+CAPTION: Mass fraction by class and protection status.
+   [[file:pad-us_nlcd/images/massFracPlot.png]]
+
+   Many classes are not included in NBCD model and so get assigned zero density.
+
