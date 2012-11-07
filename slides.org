@@ -1,7 +1,7 @@
 #+TITLE:     Carbon Inventory Overview
 #+AUTHOR:    Neil Best
 #+EMAIL:     nbest@ci.uchicago.edu
-#+DATE:      2012-10-29 Mon
+#+DATE:      
 #+DESCRIPTION:
 #+KEYWORDS:
 #+LANGUAGE:  en
@@ -30,7 +30,7 @@
    #+LABEL: fig:nlcd
    [[file:pad-us_nlcd/images/nlcd.png]]
 
-   Categorical raster image, 30m resolution
+   Categorical raster image, 30m resolution \Longrightarrow 16 billion pixels!
 
 ** Protected Areas Database of the United States (PAD-US)
 
@@ -51,6 +51,33 @@
    density and basal area-weighted height
 
 * Aggregation
+
+** Tabulate the raw statistics
+
+Use GIS to get pixel counts for each permutation present
+
+#+begin_src R :cache yes :results output org replace :exports results :session *R*
+ascii(
+  head( rawCountyStats[ J( "17", "031"), list( nlcd, gap, aldb,n)], n= 10),
+  row.names= FALSE, digits= 0, include.rownames= FALSE)
+#+end_src
+
+#+results[f033d479f35300cfb30853d72652c4b140121af1]:
+#+BEGIN_ORG
+| state | county | nlcd | gap   | aldb | n       |
+|-------+--------+------+-------+------+---------|
+| 17    | 031    | 11   | FALSE | 0    | 1975005 |
+| 17    | 031    | 11   | TRUE  | 0    | 20221   |
+| 17    | 031    | 21   | FALSE | 0    | 155759  |
+| 17    | 031    | 21   | FALSE | 37   | 1       |
+| 17    | 031    | 21   | FALSE | 38   | 11      |
+| 17    | 031    | 21   | FALSE | 39   | 29      |
+| 17    | 031    | 21   | FALSE | 40   | 45      |
+| 17    | 031    | 21   | FALSE | 41   | 99      |
+| 17    | 031    | 21   | FALSE | 42   | 206     |
+| 17    | 031    | 21   | FALSE | 43   | 392     |
+#+END_ORG
+
 
 ** Area Fraction
 
@@ -74,12 +101,15 @@
 ** Area Fraction
 
    #+CAPTION: Relative areas by class and protection status.
+   #+ATTR_LaTeX: scale=0.4
    [[file:pad-us_nlcd/images/areaFracPlot.png]]
 
 ** Mass Fraction
 
    #+CAPTION: Mass fraction by class and protection status.
+   #+ATTR_LaTeX: scale=0.4
    [[file:pad-us_nlcd/images/massFracPlot.png]]
 
-   Many classes are not included in NBCD model and so get assigned zero density.
-
+#+BEGIN_COMMENT
+   Many classes are not included in NBCD model and so get assigned zero density.   
+#+END_COMMENT

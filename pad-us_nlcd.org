@@ -31,6 +31,8 @@ library( raster, lib.loc="~/src/R/lib/")
 setOptions( progress= "text")
 library( plyr)
 library( stringr)
+library( ascii)
+options( asciiType= "org")
 
 overwriteRasters <- TRUE
 
@@ -279,11 +281,10 @@ ctFiles <- llply( regions, writeCrosstabs)
 
 * noweb componenets for GRASS scripts
 
-** create the GRASS location and import the reprojected grid
+** initialize a GRASS session
 
-#+NAME: grassCreate
-#+BEGIN_SRC sh :eval no
-# path to GRASS binaries and libraries:
+#+NAME: grassInit
+#+begin_src sh :eval no
 export GISBASE=/usr/lib/grass64
 export PATH=$PATH:$GISBASE/bin:$GISBASE/scripts
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GISBASE/lib
@@ -293,7 +294,13 @@ export GIS_LOCK=$$
 
 # path to GRASS settings file
 export GISRC=./.grassrc6
+#+end_src
 
+** create the GRASS location and import the reprojected grid
+
+#+NAME: grassCreate
+#+BEGIN_SRC sh :eval no
+# path to GRASS binaries and libraries:
 g.gisenv set=LOCATION_NAME=$GIS_LOCK
 eval $(g.gisenv)
 mkdir -p $GISDBASE/$GIS_LOCK
@@ -362,6 +369,7 @@ rm -rf /tmp/grass6-$USER-$GIS_LOCK
 #+BEGIN_SRC sh :tangle tangled/grassPuertoRico.sh
 LOCATION=PuertoRico
 NLCD=Nlcd01v1PR
+<<grassInit>>
 <<grassCreate>>
 <<rInGdalNlcd( "Nlcd01v1PR")>>
 <<grassMapcalc>>
@@ -372,6 +380,7 @@ NLCD=Nlcd01v1PR
 #+BEGIN_SRC sh :tangle tangled/grassHawaii.sh
 LOCATION=Hawaii
 NLCD=Nlcd01v1HI
+<<grassInit>>
 <<grassCreate>>
 <<rInGdalNlcd( "Nlcd01v1HI")>>
 <<grassMapcalc>>
@@ -382,6 +391,7 @@ NLCD=Nlcd01v1HI
 #+BEGIN_SRC sh :tangle tangled/grassAlaska.sh
 LOCATION=Alaska
 NLCD=Nlcd01v1AK
+<<grassInit>>
 <<grassCreate>>
 <<rInGdalNlcd( "Nlcd01v1AK")>>
 <<grassMapcalc>>
@@ -390,8 +400,9 @@ NLCD=Nlcd01v1AK
 
 #+NAME: grassCUSA
 #+BEGIN_SRC sh  :tangle tangled/grassCUSA.sh
-LOCATION=CUSA
+LOCATION=cUSA
 NLCD=Nlcd01v1
+<<grassInit>>
 <<grassCreate>>
 <<rInGdalNlcd( "Nlcd01v1")>>
 <<grassMapcalc>>
@@ -405,10 +416,85 @@ NLCD=Nlcd06
 #+END_SRC
 
 
-* TODO ingest the NBCD data and retabulate
+* ingest the NBCD data and retabulate
+    :PROPERTIES:
+    :noweb:    yes
+    :shebang:  #!/bin/bash -v
+    :session:  nil
+    :eval:     no
+    :END:
 
-  
-* aggregate the results
+#+NAME: grassNbcd
+#+BEGIN_SRC sh :tangle tangled/grassNbcd.sh
+<<grassInit>> #
+g.gisenv set=LOCATION_NAME=cUSA
+g.gisenv set=MAPSET=PERMANENT
+eval $(g.gisenv)
+
+export GRASS_MESSAGE_FORMAT=plain 
+r.in.gdal --overwrite -e input=nbcd/data/nbcdAldb.vrt output=nbcdAldb
+r.in.gdal --overwrite -e input=nbcd/data/nbcdBawh.vrt output=nbcdBawh
+r.in.gdal --overwrite -e \
+    input=nlcd/nlcd2001_canopy_mosaic_1-29-08/nlcd_canopy_mosaic_1-29-08.img \
+    output=canopy
+# r.in.gdal --overwrite input=cusaStatesAea.img output=states
+# r.in.gdal --overwrite input=cusaCountiesAea.img output=counties
+# r.in.gdal --overwrite input=nbcdZones.img output=zones
+
+# g.region rast=nbcd
+# r.mapcalc nbcdZero='if( isnull( nbcd), 0, nbcd)'
+
+g.region rast=Nlcd01v1
+r.mask -o input=Nlcd01v1 maskcats="1 thru 95"
+
+r.mapcalc nbcdMask='eval( nbcd=canopy > 0 && nbcdBawh > 0, if( isnull( nbcd), 0, nbcd))'
+
+# echo grid_5min,Nlcd01v1,gap,aldb,n > data/statsNbcdNlcd01v1Grid5min.csv && \
+# r.stats -Nc input=grid_5min,Nlcd01v1,gap,nbcdAldb fs=, >> data/statsNbcdNlcd01v1Grid5min.csv 2> data/statsNbcdNlcd01v1Grid5min.err &
+
+echo state,county,Nlcd01v1,gap,nbcd,aldb,n > data/statsNbcdNlcd01v1County.csv \
+    && r.stats -Nc input=states,counties,,Nlcd01v1,gap,nbcdMask,nbcdAldb fs=, \
+    >> data/statsNbcdNlcd01v1County.csv \
+    2> data/statsNbcdNlcd01v1County.err &
+
+# echo zone,Nlcd01v1,gap,aldb,n > data/statsNbcdNlcd01v1Zone.csv && \
+# r.stats -Nc input=zones,Nlcd01v1,gap,nbcd fs=, >> data/statsNbcdNlcd01v1Zone.csv 2> data/statsNbcdNlcd01v1Zone.err &
+
+# g.region rast=Nlcd01v2
+# r.mask -o input=Nlcd01v2 maskcats="1 thru 95"
+
+# echo grid_5min,Nlcd01v2,gap,nbcd,n > data/statsNbcdNlcd01v2Grid5min.csv && \
+# r.stats -Nc input=grid_5min,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2Grid5min.csv 2> data/statsNbcdNlcd01v2Grid5min.err &
+
+# echo state,county,nlcd01v2,gap,nbcd,n > data/statsNbcdNlcd01v2County.csv && \
+# r.stats -Nc input=states,counties,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2County.csv 2> data/statsNbcdNlcd01v2County.err &
+
+# echo zone,nlcd01v2,gap,nbcd,n > data/statsNbcdZone.csv && \
+# r.stats -Nc input=zones,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2Zone.csv 2> data/statsNbcdNlcd01v2Zone.err &
+
+# g.region rast=Nlcd06
+# r.mask -o input=Nlcd06 maskcats="1 thru 95"
+
+# echo grid_5min,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06Grid5min.csv && \
+# r.stats -Nc input=grid_5min,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06Grid5min.csv 2> data/statsNbcdNlcd06Grid5min.err &
+
+# echo state,county,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06County.csv && \
+# r.stats -Nc input=states,counties,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06County.csv 2> data/statsNbcdNlcd06County.err &
+
+# echo zone,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06Zone.csv && \
+# r.stats -Nc input=zones,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06Zone.csv 2> data/statsNbcdNlcd06Zone.err &
+
+r.mask -r
+<<grassCleanup>>
+
+#+END_SRC
+
+** TODO separate the import of the political units' rasters
+
+
+** TODO decide whether or not to throw out the other NLCD results
+
+* aggregate the PAD-US results
    :PROPERTIES:
    :eval:     no
    :END:
@@ -622,51 +708,58 @@ setnames(
   c( "state", "usps", "name"))
 setkey( stateNames, state)
 
+keycols <- c(
+  "state", "county", "nlcd", 
+  "gap",  "nbcd", "aldb")
+
 rawCountyStats <-
   read.csv(
-    "csv/statsNbcdNlcd01v1County.csv",
+    "data/statsNbcdNlcd01v1County.csv",
     na.strings= "*",
     header= TRUE,
-    col.names= c(
-      "state", "county", "nlcd", 
-      "gap", "aldb", "n"),
+    col.names= c( keycols, "n"),
     colClasses= c(
       "character", "character", "character",
-      "numeric", "numeric", "numeric"))
-
-rawCountyStats <-
-  within( rawCountyStats, {
-    state[  is.na(  state)] <- 0   
-    county[ is.na( county)] <- 0    
-    state <-
-      str_pad( state,
-              2, pad= "0")
-    county <-
-      str_pad( county,
-              3, pad= "0")
-    gap[ is.na( gap)] <- 0
-    gap[ gap == 4] <- 0
-    gap[ gap !=0] <- 1
-    aldb[ is.na( aldb)] <- 0
-    gap <- as.logical( gap) } )
+      "integer", "integer", "integer", "integer"))
 
 rawCountyStats <- data.table( rawCountyStats)
-keycols <-
-  colnames(rawCountyStats)[ colnames(rawCountyStats) != "n"]
 setkeyv( rawCountyStats, keycols)
+
+{
+  rawCountyStats[ is.na(  state),  state := "0"]
+  rawCountyStats[ is.na( county), county := "0"]
+  rawCountyStats[,  state :=
+                 str_pad(
+                   as.character(  state),
+                   2, pad= "0")]
+  rawCountyStats[, county :=
+                 str_pad(
+                   as.character( county),
+                   3, pad= "0")]
+  rawCountyStats[ is.na( gap), gap := 0L]
+  rawCountyStats[ gap == 4L, gap := 0L]
+  rawCountyStats[ gap != 0L, gap := 1L]
+  rawCountyStats[ is.na( aldb), aldb := 0L]
+  rawCountyStats[, gap := as.logical( gap)]
+  rawCountyStats[, nbcd := as.logical( nbcd)]
+  rawCountyStats[ !nbcd, aldb := NA]
+}
+
+setkeyv( rawCountyStats, keycols)
+
 
 #+end_src
 
-** zero out pixel counts for low-carbon forest observations
+** COMMENT zero out pixel counts for low-carbon forest observations
 
 
-#+begin_src R :results output silent
+#+begin_src R
 
 rawCountyStats[, n2 := n]
 
 rawCountyStats[ nlcd %in% as.character( c( 41, 42, 43, 90))
                  & aldb <= 5,
-               n2 := 0]
+               n2 := 0L]
 
 rawCountyStats <-
   rawCountyStats[, list( n= sum( n),
@@ -723,10 +816,16 @@ qplot(
 
 #+END_SRC
 
+#+results: forestHistDetail
+[[file:pad-us_nlcd/images/forestHistDetail.png]]
+
 #+results:
 [[file:pad-us_nlcd/images/forestHistDetail.png]]
 
 ** COMMENT by NBCD mapping zones
+   :PROPERTIES:
+   :eval:     no
+   :END:
   
 #+begin_src R
   library( reshape)
@@ -949,14 +1048,14 @@ qplot(
         paste( colnames( nbcdZone), collapse= ",")),
       "left join 'nbcdZone.csv'.nbcdZone b",
       "on a.zone = b.zone\"",
-      "shp/nbcdZone.shp shp/nbcdZones.shp")
+      "data/nbcdZone.shp data/nbcdZones.shp")
   
   system( ogr2ogr)
   
   zip(
-    "pad-us_nlcd_nbcd.zip",
+    "pad-us_nlcd.zip",
     list.files(
-      path= "shp",
+      path= "pad-us_nlcd",
       pattern= "^nbcdZone\\.",
       full.names= TRUE))
   
@@ -975,7 +1074,7 @@ GAP TRUE/FALSE naming, . . .
 
 *** calculate the average densities for original and modified pixel counts
 
-#+begin_src R :results output silent
+#+begin_src R
 
 statsNbcdState <-
   rawStateStats[, list( aldb= weighted.mean( aldb, n),
@@ -984,7 +1083,7 @@ statsNbcdState <-
                        n2= sum( n2),
                        ha= sum(n) * 30^2 / 10^4,
                        ha2= sum(n2) * 30^2 / 10^4),
-                keyby= "state,nlcd,gap"] 
+                keyby= "state,nlcd,gap,nbcd"] 
 stateAreas <-
   statsNbcdState[ , list( totHa= sum(ha)),
                  keyby= "state"]
@@ -993,65 +1092,112 @@ statsNbcdState <-
 
 #+end_src
 
-Some states have forests where all NBCD values were zero.  
-
-#+BEGIN_SRC R :results output org replace :exports both
-## statsNbcdState[ stateNames, nomatch=0][ is.na( aldb2)][
-##                               order( -ha),
-##                               list( usps, nlcd, gap, ha)]
-
-## suppressWarnings(
-##   ascii(
-##     cast(
-##       statsNbcdState[ stateNames, nomatch=0][ is.na( aldb2)],
-##       usps ~ nlcd,
-##       sum,
-##       value= "ha",
-##       margins= TRUE,
-##       fill= NA),
-##     digits= 0,
-##     include.rownames = FALSE))
-
-## ,
-##   colnames= c( "FIPS", "name", "region"))
-
-suppressWarnings(
-  ascii(
-    cast(
-      statsNbcdState[ stateNames, nomatch=0][ is.na( aldb2)],
-      gap + usps ~ nlcd,
-      sum,
-      value= "ha",
-      margins= TRUE,
-      fill= NA),
-    digits= 0,
-    include.rownames = FALSE))
-
-#+END_SRC
 
 #+results:
 #+BEGIN_ORG
-| gap   | usps  | 43      | 90     | (all)   |
-|-------+-------+---------+--------+---------|
-| FALSE | AZ    | 418     | 41418  | 41836   |
-| FALSE | CA    | 602269  | 59116  | 661385  |
-| FALSE | CO    |         | 153555 | 153555  |
-| FALSE | MT    | 10618   |        | 10618   |
-| FALSE | NM    | 6255    | 33295  | 39550   |
-| FALSE | NV    | 924     | 73571  | 74495   |
-| FALSE | OR    | 394996  |        | 394996  |
-| FALSE | WA    | 286592  |        | 286592  |
-| FALSE | (all) | 1302072 | 360956 | 1663028 |
-| TRUE  | AZ    | 11267   | 44313  | 55581   |
-| TRUE  | CA    | 416041  | 26084  | 442125  |
-| TRUE  | CO    |         | 128555 | 128555  |
-| TRUE  | MT    | 19429   |        | 19429   |
-| TRUE  | NM    | 18237   | 19361  | 37598   |
-| TRUE  | NV    | 9497    | 20714  | 30211   |
-| TRUE  | OR    | 243347  |        | 243347  |
-| TRUE  | WA    | 104410  |        | 104410  |
-| TRUE  | (all) | 822228  | 239028 | 1061256 |
-| (all) | (all) | 2124300 | 599983 | 2724284 |
+| gap   | usps  | 11       | 12     | 21       | 22      | 23      | 24      | 31      | 41      | 42      | 43     | 52        | 71        | 81       | 82        | 90     | 95      | (all)     |
+|-------+-------+----------+--------+----------+---------+---------+---------+---------+---------+---------+--------+-----------+-----------+----------+-----------+--------+---------+-----------|
+| FALSE | AL    | 468079   |        | 305977   | 139999  | 53865   | 18852   | 40196   | 2864    | 2232    | 763    | 239284    | 267149    | 1715836  | 782651    | 510    | 43974   | 4082230   |
+| FALSE | AR    | 313162   |        | 307311   | 149266  | 36615   | 14396   | 14857   | 1349    | 198     | 241    | 376222    | 159126    | 1817260  | 2751207   | 602    | 14717   | 5956527   |
+| FALSE | AZ    | 30996    |        | 201169   | 165343  | 91732   | 14969   | 213516  | 422     | 22166   | 51     | 7689028   | 525632    | 96862    | 442908    | 20604  | 8193    | 9523593   |
+| FALSE | CA    | 380079   | 2      | 772511   | 501105  | 596768  | 147742  | 646915  | 8413    | 30623   | 10777  | 4549123   | 4280393   | 709751   | 3299804   | 8997   | 121808  | 16064811  |
+| FALSE | CO    | 82851    | 1630   | 361783   | 136063  | 61472   | 18207   | 55096   | 1955    | 6114    | 33     | 2247613   | 6413196   | 636723   | 3084597   | 1052   | 103248  | 13211633  |
+| FALSE | CT    | 177718   |        | 37249    | 61097   | 50617   | 12896   | 3539    | 3423    | 382     | 305    | 14589     | 3273      | 92591    | 16003     | 932    | 7045    | 481659    |
+| FALSE | DC    | 1700     |        | 1197     | 1549    | 4561    | 2064    | 96      | 1       | 0       | 0      |           |           | 272      | 112       | 0      | 80      | 11633     |
+| FALSE | DE    | 135674   |        | 9339     | 13485   | 9041    | 4095    | 4563    | 9       | 1       | 1      |           |           | 74069    | 169637    | 76     | 15350   | 435339    |
+| FALSE | FL    | 2318784  |        | 571114   | 449481  | 223399  | 69138   | 60773   | 3419    | 11302   | 7495   | 191372    | 704749    | 1268844  | 1121328   | 24097  | 620326  | 7645622   |
+| FALSE | GA    | 362721   |        | 308634   | 200969  | 87800   | 45033   | 70284   | 23772   | 19438   | 21251  | 61643     | 1223651   | 1390035  | 1479627   | 30992  | 211097  | 5536947   |
+| FALSE | IA    | 102281   |        | 708346   | 188882  | 48536   | 16449   | 6535    | 377     | 6       | 32     | 15451     | 660388    | 1859392  | 9502479   | 875    | 59559   | 13169586  |
+| FALSE | ID    | 143394   | 14     | 194213   | 67973   | 18355   | 2241    | 5707    | 1197    | 30403   | 31     | 2041704   | 948704    | 343972   | 1961275   | 23146  | 54527   | 5836857   |
+| FALSE | IL    | 584818   |        | 632513   | 585148  | 201549  | 78838   | 7658    | 10722   | 173     | 60     | 3725      | 105412    | 1276019  | 8722320   | 1434   | 21244   | 12231635  |
+| FALSE | IN    | 160135   |        | 493248   | 237110  | 83958   | 40171   | 5574    | 29181   | 473     | 11     | 10451     | 146447    | 697151   | 5134567   | 178    | 17306   | 7055960   |
+| FALSE | KS    | 179816   |        | 743823   | 192398  | 44979   | 16991   | 13280   | 170     | 4       | 3      | 71314     | 7735517   | 1895987  | 9128987   | 271    | 11785   | 20035327  |
+| FALSE | KY    | 187078   |        | 389701   | 137765  | 53510   | 19709   | 29655   | 130933  | 2140    | 1438   | 20842     | 398651    | 2300189  | 1147263   | 1052   | 22513   | 4842439   |
+| FALSE | LA    | 2134364  |        | 173822   | 248756  | 59945   | 26346   | 33578   | 84      | 187     | 67     | 706965    | 186763    | 700209   | 2030451   | 1485   | 1054774 | 7357796   |
+| FALSE | MA    | 670333   |        | 41196    | 95716   | 116746  | 35716   | 24213   | 4952    | 1769    | 1367   | 16772     | 10935     | 109595   | 29857     | 1906   | 24262   | 1185335   |
+| FALSE | MD    | 660487   |        | 51055    | 66755   | 43208   | 18112   | 26291   | 1435    | 104     | 14     |           |           | 536808   | 440032    | 483    | 54456   | 1899240   |
+| FALSE | ME    | 1109089  |        | 143416   | 72724   | 24571   | 8987    | 44518   | 5700    | 4134    | 5308   | 257981    | 63900     | 150635   | 179869    | 469    | 96576   | 2167877   |
+| FALSE | MI    | 10102421 |        | 414139   | 391902  | 185480  | 73265   | 69711   | 6771    | 820     | 1071   | 50936     | 578424    | 1003585  | 2836816   | 4045   | 126789  | 15846174  |
+| FALSE | MN    | 1581249  |        | 606199   | 193098  | 77364   | 32870   | 25405   | 8600    | 479     | 91     | 60293     | 473512    | 1545555  | 7873752   | 2631   | 869390  | 13350488  |
+| FALSE | MO    | 236134   |        | 568896   | 261499  | 81649   | 32419   | 22286   | 3534    | 75      | 355    | 48187     | 249369    | 5363419  | 3776252   | 571    | 20490   | 10665134  |
+| FALSE | MS    | 451103   |        | 225958   | 80617   | 34592   | 10993   | 19737   | 96      | 60      | 39     | 74973     | 69771     | 1366826  | 1925194   | 402    | 74950   | 4335310   |
+| FALSE | MT    | 229975   | 481    | 323156   | 86148   | 21791   | 3797    | 60376   | 1987    | 54136   | 281    | 3190555   | 11099229  | 626081   | 5159554   | 6600   | 120330  | 20984477  |
+| FALSE | NC    | 1304820  |        | 408633   | 224987  | 82838   | 30701   | 48830   | 7109    | 772     | 284    | 57305     | 742063    | 1492937  | 1435514   | 886    | 110306  | 5947985   |
+| FALSE | ND    | 531188   |        | 578862   | 57748   | 12296   | 3395    | 25262   | 3667    | 1439    | 991    | 103945    | 4674510   | 1421841  | 7959572   | 437    | 596579  | 15971732  |
+| FALSE | NE    | 150057   |        | 489612   | 112156  | 30277   | 12935   | 9947    | 115     | 447     | 86     | 14309     | 10549919  | 231636   | 7032679   | 80     | 255922  | 18890176  |
+| FALSE | NH    | 90813    |        | 47554    | 36472   | 23655   | 6615    | 6686    | 1852    | 1471    | 908    | 23630     | 6205      | 72202    | 26261     | 343    | 11364   | 356030    |
+| FALSE | NJ    | 317367   |        | 41391    | 57458   | 78152   | 38340   | 28885   | 589     | 634     | 193    | 1737      | 471       | 104964   | 226816    | 1204   | 38701   | 936902    |
+| FALSE | NM    | 44690    | 25     | 180190   | 67031   | 20098   | 3788    | 181610  | 269     | 20472   | 56     | 8024737   | 7824062   | 47085    | 490900    | 288    | 28889   | 16934190  |
+| FALSE | NV    | 92266    | 5      | 56459    | 59545   | 41216   | 15565   | 158018  | 212     | 3888    | 120    | 3512561   | 266744    | 200451   | 73906     | 10220  | 37098   | 4528276   |
+| FALSE | NY    | 1873054  |        | 272222   | 170002  | 137695  | 74426   | 22897   | 45135   | 4162    | 4649   | 257736    | 118593    | 1731563  | 1063349   | 13743  | 56402   | 5845629   |
+| FALSE | OH    | 994168   |        | 627995   | 395758  | 145209  | 59432   | 13338   | 23762   | 887     | 65     | 13725     | 167594    | 1166853  | 4186701   | 88     | 20574   | 7816150   |
+| FALSE | OK    | 304105   |        | 653378   | 149587  | 58419   | 27527   | 31517   | 1537    | 502     | 62     | 676781    | 6484410   | 2039052  | 3251175   | 443    | 15088   | 13693584  |
+| FALSE | OR    | 485129   | 396    | 206107   | 121279  | 60543   | 23964   | 131724  | 1412    | 50493   | 9312   | 4198487   | 727159    | 710969   | 1238581   | 889    | 160855  | 8127299   |
+| FALSE | PA    | 318065   |        | 350350   | 253541  | 127973  | 55999   | 46247   | 52102   | 1463    | 2895   | 53065     | 52760     | 1785262  | 1084261   | 1772   | 20907   | 4206660   |
+| FALSE | RI    | 126307   |        | 5837     | 13900   | 25957   | 9360    | 2517    | 1231    | 175     | 341    | 1803      | 2364      | 13080    | 1923      | 535    | 4005    | 209335    |
+| FALSE | SC    | 486501   |        | 191672   | 100874  | 45525   | 17954   | 36118   | 1925    | 925     | 223    | 48578     | 735662    | 737054   | 615732    | 438    | 136249  | 3155430   |
+| FALSE | SD    | 415953   |        | 450709   | 62177   | 17541   | 5327    | 86969   | 1183    | 2110    | 347    | 194444    | 9167304   | 2010123  | 5168442   | 380    | 310140  | 17893148  |
+| FALSE | TN    | 233772   |        | 409989   | 189413  | 71020   | 28857   | 19158   | 64755   | 5613    | 5224   | 112639    | 291648    | 1990871  | 1252249   | 4172   | 10689   | 4690069   |
+| FALSE | TX    | 1487833  |        | 1682420  | 817054  | 338948  | 171044  | 390670  | 522     | 2204    | 83     | 23759574  | 12156186  | 5923762  | 7891982   | 978    | 414494  | 55037754  |
+| FALSE | UT    | 558749   | 11     | 90909    | 48413   | 18621   | 13354   | 829446  | 31165   | 51848   | 761    | 2853929   | 456300    | 537720   | 184370    | 2972   | 42598   | 5721166   |
+| FALSE | VA    | 800110   |        | 231965   | 158252  | 73051   | 25232   | 72692   | 50947   | 3951    | 2093   | 3903      | 149174    | 2025946  | 448375    | 807    | 65608   | 4112105   |
+| FALSE | VT    | 91823    |        | 51345    | 28949   | 13282   | 2890    | 2577    | 1898    | 708     | 451    | 24343     | 5176      | 240061   | 103850    | 505    | 4882    | 572739    |
+| FALSE | WA    | 1061321  | 807    | 260984   | 204260  | 104150  | 35595   | 89187   | 5831    | 73375   | 5717   | 2813556   | 615935    | 340812   | 2450638   | 1149   | 119850  | 8183167   |
+| FALSE | WI    | 2813295  |        | 392024   | 254154  | 81657   | 29350   | 9166    | 337580  | 24672   | 21480  | 113069    | 226939    | 1538485  | 3760951   | 103249 | 359412  | 10065483  |
+| FALSE | WV    | 41304    |        | 118783   | 72398   | 30505   | 6975    | 34679   | 56459   | 1934    | 370    | 328       | 87122     | 496545   | 79664     | 53     | 2481    | 1029602   |
+| FALSE | WY    | 26212    | 109    | 101407   | 34635   | 10221   | 1626    | 71878   | 398     | 11278   | 50     | 4986702   | 4438439   | 343586   | 342014    | 2228   | 179336  | 10550119  |
+| FALSE | (all) | 37453346 | 3481   | 16486759 | 8414889 | 3960952 | 1464544 | 3854378 | 943021  | 452842  | 107846 | 73789908  | 96250928  | 54780526 | 123366449 | 281268 | 6777220 | 428388358 |
+| TRUE  | AL    | 9236     |        | 4656     | 1290    | 494     | 203     | 960     | 328     | 135     | 37     | 5681      | 4622      | 10854    | 5154      | 51     | 4265    | 47967     |
+| TRUE  | AR    | 17768    |        | 4426     | 999     | 114     | 9       | 776     | 141     | 34      | 18     | 4217      | 8907      | 16428    | 21822     | 93     | 1727    | 77480     |
+| TRUE  | AZ    | 39803    |        | 58029    | 13982   | 1201    | 124     | 489282  | 3783    | 199139  | 1187   | 12192560  | 1263485   | 10987    | 8745      | 12682  | 7960    | 14302947  |
+| TRUE  | CA    | 1552800  | 4552   | 133523   | 44172   | 20165   | 2100    | 1360481 | 3132    | 122960  | 11431  | 9502730   | 1049066   | 48814    | 63803     | 2469   | 91941   | 14014141  |
+| TRUE  | CO    | 23878    | 63452  | 42260    | 6639    | 828     | 142     | 359235  | 6069    | 29794   | 338    | 2168981   | 2222538   | 40831    | 71647     | 947    | 23263   | 5060843   |
+| TRUE  | CT    | 2139     |        | 824      | 672     | 256     | 49      | 249     | 126     | 20      | 15     | 1427      | 211       | 3621     | 541       | 60     | 3467    | 13677     |
+| TRUE  | DC    | 8        |        | 50       | 36      | 43      | 9       | 1       | 0       |         |        |           |           | 4        | 0         |        | 7       | 158       |
+| TRUE  | DE    | 2522     |        | 781      | 681     | 287     | 55      | 2367    | 0       | 0       |        |           |           | 5504     | 14829     | 21     | 13502   | 40550     |
+| TRUE  | FL    | 342675   |        | 19647    | 9248    | 1437    | 348     | 12267   | 392     | 2684    | 710    | 48100     | 92841     | 90243    | 69983     | 11971  | 950866  | 1653413   |
+| TRUE  | GA    | 10956    |        | 3340     | 908     | 187     | 16      | 3912    | 562     | 356     | 234    | 1099      | 18019     | 5169     | 2078      | 1181   | 43828   | 91844     |
+| TRUE  | IA    | 33902    |        | 4791     | 841     | 124     | 23      | 68      | 23      | 27      | 3      | 366       | 28800     | 11510    | 25678     | 952    | 14483   | 121594    |
+| TRUE  | ID    | 56721    | 10115  | 34868    | 8878    | 3444    | 122     | 279409  | 6761    | 125063  | 271    | 5533595   | 1916468   | 19438    | 48533     | 6051   | 39697   | 8089434   |
+| TRUE  | IL    | 62011    |        | 11179    | 6306    | 1155    | 301     | 391     | 552     | 5       | 2      | 408       | 10225     | 22739    | 66547     | 994    | 12881   | 195696    |
+| TRUE  | IN    | 7258     |        | 4186     | 1047    | 169     | 22      | 195     | 1594    | 18      | 0      | 1850      | 3175      | 4354     | 21132     | 15     | 1844    | 46859     |
+| TRUE  | KS    | 30951    |        | 9003     | 2115    | 357     | 122     | 523     | 3       |         |        | 16011     | 86924     | 50551    | 47792     | 13     | 3922    | 248286    |
+| TRUE  | KY    | 5308     |        | 4090     | 1228    | 340     | 52      | 885     | 6018    | 226     | 433    | 478       | 11841     | 5101     | 8903      | 75     | 3846    | 48823     |
+| TRUE  | LA    | 169308   |        | 4309     | 3148    | 349     | 67      | 15369   | 3       | 6       | 2      | 25300     | 7234      | 4447     | 35759     | 28     | 239518  | 504849    |
+| TRUE  | MA    | 16014    |        | 3376     | 4546    | 2811    | 571     | 9338    | 546     | 216     | 115    | 6352      | 2592      | 10521    | 2401      | 360    | 16123   | 75881     |
+| TRUE  | MD    | 19244    |        | 2044     | 1120    | 475     | 130     | 6002    | 395     | 30      | 22     |           |           | 25867    | 26791     | 203    | 34725   | 117048    |
+| TRUE  | ME    | 13527    |        | 5900     | 1460    | 366     | 41      | 5342    | 1693    | 1866    | 2502   | 48642     | 5403      | 1417     | 936       | 197    | 22488   | 111780    |
+| TRUE  | MI    | 215741   |        | 22296    | 8269    | 1067    | 184     | 14263   | 2336    | 508     | 853    | 29422     | 157007    | 8680     | 22237     | 1931   | 130594  | 615388    |
+| TRUE  | MN    | 351099   |        | 43161    | 9281    | 2559    | 1766    | 5332    | 2234    | 653     | 8      | 30657     | 119870    | 158662   | 279040    | 3456   | 547042  | 1554819   |
+| TRUE  | MO    | 18462    |        | 6778     | 1384    | 158     | 20      | 1343    | 167     | 2       | 9      | 2024      | 12033     | 30943    | 44636     | 471    | 14189   | 132616    |
+| TRUE  | MS    | 33649    |        | 3606     | 972     | 322     | 61      | 2023    | 3       | 1       | 2      | 2067      | 2313      | 6122     | 26561     | 9      | 23101   | 100813    |
+| TRUE  | MT    | 93473    | 8557   | 36872    | 7556    | 1409    | 53      | 161594  | 881     | 139152  | 792    | 1774809   | 4803967   | 53320    | 283954    | 1677   | 37135   | 7405201   |
+| TRUE  | NC    | 16693    |        | 4934     | 1632    | 454     | 90      | 7883    | 4458    | 369     | 173    | 6214      | 18815     | 8224     | 7078      | 228    | 37164   | 114407    |
+| TRUE  | ND    | 161874   |        | 52606    | 5191    | 1071    | 210     | 17937   | 2979    | 2853    | 1244   | 59891     | 765665    | 125200   | 565505    | 353    | 95169   | 1857747   |
+| TRUE  | NE    | 44855    |        | 8232     | 1616    | 142     | 12      | 2595    | 28      | 113     | 9      | 1387      | 306709    | 4893     | 80310     | 7      | 11628   | 462535    |
+| TRUE  | NH    | 4152     |        | 5959     | 1974    | 546     | 83      | 1954    | 1537    | 1714    | 1410   | 3846      | 989       | 6802     | 2100      | 116    | 3893    | 37075     |
+| TRUE  | NJ    | 20956    |        | 4054     | 2758    | 1516    | 330     | 7255    | 539     | 1044    | 235    | 1223      | 327       | 14634    | 32079     | 866    | 54859   | 142676    |
+| TRUE  | NM    | 20504    | 27     | 34569    | 6617    | 835     | 73      | 153904  | 1249    | 76368   | 39     | 6107126   | 1779217   | 9541     | 23264     | 136    | 5502    | 8218972   |
+| TRUE  | NV    | 50995    | 237    | 49239    | 20750   | 1577    | 224     | 718119  | 2554    | 68485   | 335    | 18587280  | 736518    | 26763    | 8126      | 1850   | 25746   | 20298795  |
+| TRUE  | NY    | 58134    |        | 6420     | 2875    | 1682    | 711     | 4450    | 7033    | 6305    | 1318   | 28112     | 6028      | 13955    | 8320      | 4958   | 26788   | 177090    |
+| TRUE  | OH    | 44291    |        | 9495     | 3208    | 807     | 136     | 392     | 1231    | 83      | 8      | 552       | 5538      | 14503    | 19572     | 20     | 6017    | 105852    |
+| TRUE  | OK    | 60904    |        | 8272     | 1286    | 330     | 92      | 5411    | 35      | 7       | 7      | 19457     | 117922    | 14211    | 10373     | 11     | 3644    | 241963    |
+| TRUE  | OR    | 84797    | 2908   | 33060    | 8316    | 574     | 62      | 231101  | 911     | 167319  | 10667  | 6266569   | 543971    | 22855    | 14626     | 365    | 43610   | 7431713   |
+| TRUE  | PA    | 21282    |        | 5451     | 1353    | 501     | 108     | 3930    | 6058    | 291     | 652    | 26324     | 8666      | 15449    | 11502     | 299    | 3552    | 105418    |
+| TRUE  | RI    | 1139     |        | 864      | 860     | 390     | 44      | 423     | 266     | 54      | 148    | 189       | 654       | 2082     | 531       | 172    | 1865    | 9681      |
+| TRUE  | SC    | 9023     |        | 2822     | 926     | 507     | 233     | 2222    | 472     | 21      | 24     | 1991      | 23730     | 4043     | 4248      | 127    | 62850   | 113237    |
+| TRUE  | SD    | 70142    |        | 13747    | 2318    | 257     | 20      | 81795   | 137     | 2727    | 34     | 63400     | 939181    | 34615    | 20997     | 18     | 29560   | 1258946   |
+| TRUE  | TN    | 12303    |        | 6999     | 2196    | 517     | 98      | 3227    | 7622    | 1222    | 1179   | 2130      | 9153      | 17339    | 18614     | 639    | 1665    | 84903     |
+| TRUE  | TX    | 99823    |        | 18905    | 7529    | 1136    | 249     | 38566   | 28      | 132     | 1      | 667249    | 153416    | 53686    | 17040     | 107    | 132944  | 1190812   |
+| TRUE  | UT    | 129074   | 111    | 50525    | 15350   | 2836    | 87      | 1483200 | 35928   | 227058  | 2186   | 7284464   | 983575    | 48161    | 2528      | 5093   | 19369   | 10289546  |
+| TRUE  | VA    | 17872    |        | 3933     | 881     | 295     | 32      | 6570    | 4027    | 293     | 245    | 250       | 2710      | 35462    | 9649      | 141    | 38343   | 120703    |
+| TRUE  | VT    | 3985     |        | 1762     | 593     | 161     | 10      | 340     | 355     | 236     | 144    | 2950      | 812       | 5631     | 3631      | 74     | 2534    | 23218     |
+| TRUE  | WA    | 110461   | 54704  | 30576    | 21486   | 6427    | 2171    | 191432  | 3272    | 192610  | 4034   | 1150219   | 349195    | 31600    | 152596    | 455    | 25907   | 2327145   |
+| TRUE  | WI    | 106828   |        | 12250    | 3519    | 536     | 98      | 905     | 17874   | 1382    | 2425   | 7506      | 18891     | 11867    | 61118     | 21025  | 108784  | 375008    |
+| TRUE  | WV    | 12179    |        | 2208     | 884     | 415     | 52      | 1375    | 1699    | 98      | 52     | 18        | 1947      | 5661     | 1560      | 3      | 1093    | 29244     |
+| TRUE  | WY    | 110979   | 7658   | 37744    | 9821    | 785     | 68      | 178733  | 554     | 36277   | 189    | 7450956   | 2743825   | 53499    | 20073     | 512    | 77121   | 10728794  |
+| TRUE  | (all) | 4401700  | 152322 | 868620   | 260717  | 64414   | 11879   | 5875326 | 138587  | 1409958 | 45741  | 79136076  | 21344995  | 1226803  | 2294945   | 83482  | 3102023 | 120417588 |
+| (all) | (all) | 41855046 | 155803 | 17355380 | 8675606 | 4025366 | 1476423 | 9729705 | 1081607 | 1862801 | 153587 | 152925984 | 117595924 | 56007329 | 125661393 | 364750 | 9879244 | 548805946 |
 #+END_ORG
 
 To backfill those NLCD/GAP combinations we must calculate national averages.
@@ -1075,10 +1221,10 @@ ascii(
 #+BEGIN_ORG
 | nlcd | FALSE | TRUE  |
 |------+-------+-------|
-| 41   | 109.8 | 118.8 |
-| 42   | 103.3 | 120.5 |
-| 43   | 105.5 | 119.3 |
-| 90   | 98.7  | 93.1  |
+| 41   | 111.4 | 119.5 |
+| 42   | 103.7 | 120.5 |
+| 43   | 110.2 | 134.0 |
+| 90   | 96.4  | 91.1  |
 #+END_ORG
 
 *** COMMENT these plots show states with problem forests
@@ -1154,19 +1300,19 @@ ggplot(
 *** backfill the null state densities with national means
 
 #+begin_src R
-statsNbcdState <-
-  merge( statsNbcdState, nbcdMean, all.x= TRUE)
-statsNbcdState[ is.na( aldb2), aldb2 := aldb.y][, aldb.y := NULL]
-setkey( statsNbcdState, state, nlcd, gap)
-setnames( statsNbcdState, "aldb.x", "aldb")
-setcolorder( statsNbcdState, c( 3, 1, 2, 4:11))
+## statsNbcdState <-
+##   merge( statsNbcdState, nbcdMean, all.x= TRUE)
+## statsNbcdState[ is.na( aldb2), aldb2 := aldb.y][, aldb.y := NULL]
+## setkey( statsNbcdState, state, nlcd, gap)
+## setnames( statsNbcdState, "aldb.x", "aldb")
+## setcolorder( statsNbcdState, c( 3, 1, 2, 4:11))
 
 ## test
 ## any( abs( statsNbcdState[, list( frac= sum(frac)), by= state][, frac] - 1) > 0.001)
 
 
 write.csv(
-  statsNbcdState,
+  statsNbcdState[, list( state,nlcd,gap,nbcd,aldb,n,ha,frac)],
   row.names= FALSE,
   file= "pad-us_nlcd/nbcdStateSerial.csv",
   quote= FALSE)
@@ -1187,7 +1333,7 @@ nbcdStateAldb <-
     cast(
       data= statsNbcdState,
       formula= state ~ gap + nlcd,
-      value= "aldb2"),
+      value= "aldb"),
     key= "state")
 
 setnames(
@@ -1204,7 +1350,7 @@ nbcdStateAldbMeans <-
   data.table(
     cast(
       data=
-      statsNbcdState[, list( aldbAve= weighted.mean( aldb2, ha)),
+      statsNbcdState[, list( aldbAve= weighted.mean( aldb, ha)),
                      by= c( "state", "gap")],
       formula= state ~ gap,
       value= "aldbAve"),
@@ -1367,7 +1513,7 @@ zip(
 
 *** COMMENT DONE figure out if is.na( aldb2) is correct
 
-   
+    
 
 ** repeat for counties
 
@@ -1385,47 +1531,230 @@ statsNbcdCounty <-
     n2= sum( n2),
     ha= sum(n) * 30^2 / 10^4,
     ha2= sum(n2) * 30^2 / 10^4),
-                 keyby= "state,county,nlcd,gap"]
+                 keyby= "state,county,nlcd,gap,nbcd"]
 countyAreas <-
   statsNbcdCounty[, list( totHa= sum(ha)),
                   keyby= c( "state", "county")]
 statsNbcdCounty <-
   statsNbcdCounty[ countyAreas][, frac:=ha/totHa]
   
-statsNbcdCounty <-
-  merge(
-    statsNbcdCounty,
-    statsNbcdState[, list( state, nlcd, gap, aldb2, n2)],
-    by= c( "state", "nlcd", "gap"),
-    all.x= TRUE)
+## statsNbcdCounty <-
+##   merge(
+##     statsNbcdCounty,
+##     statsNbcdState[, list( state, nlcd, gap, aldb2, n2)],
+##     by= c( "state", "nlcd", "gap"),
+##     all.x= TRUE)
 
-statsNbcdCounty[, fill := as.character(NA)]
+## statsNbcdCounty[, fill := as.character(NA)]
 
-statsNbcdCounty[ n2.x == 0 & n2.y == 0, fill := "cUSA"]
-statsNbcdCounty[ n2.x == 0 & n2.y != 0, fill := "state"]
+## statsNbcdCounty[ n2.x == 0 & n2.y == 0, fill := "cUSA"]
+## statsNbcdCounty[ n2.x == 0 & n2.y != 0, fill := "state"]
 
-statsNbcdCounty[ is.na( aldb2.x), aldb2.x := aldb2.y]
-statsNbcdCounty[, aldb2.y := NULL]
-statsNbcdCounty[,    n2.y := NULL]
-statsNbcdCounty[,   totHa := NULL]
+## statsNbcdCounty[ is.na( aldb2.x), aldb2.x := aldb2.y]
+## statsNbcdCounty[, aldb2.y := NULL]
+## statsNbcdCounty[,    n2.y := NULL]
+## statsNbcdCounty[,   totHa := NULL]
 
-setkey( statsNbcdCounty, state, county, nlcd, gap)
-setnames(
-  statsNbcdCounty,
-  c( "aldb2.x", "n2.x"),
-  c( "aldb2",   "n2"))
+## setkey( statsNbcdCounty, state, county, nlcd, gap)
+## setnames(
+##   statsNbcdCounty,
+##   c( "aldb2.x", "n2.x"),
+##   c( "aldb2",   "n2"))
 
-setcolorder(
-  statsNbcdCounty,
-  c( "state", "county", "nlcd", "gap",
-    "aldb", "aldb2", "n", "n2", "ha", "ha2",
-    "frac", "fill"))
+## setcolorder(
+##   statsNbcdCounty,
+##   c( "state", "county", "nlcd", "gap",
+##     "aldb", "aldb2", "n", "n2", "ha", "ha2",
+##     "frac", "fill"))
 
 ## test
 ## any( abs( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1) > 0.001)
+#+end_src
+
+*** check for cases where NBCD makes no prediction
+
+NBCD only predicts biomass density where it has sufficient canopy
+density and basal area-weighted height to do so.  We can presume that
+the ALDB density for a given state/county//nlcd/gap combination outside of the
+NBCD prediction is something less than its modeled counterpart.  Any
+heuristic that attempts to plug in a density value not predicted by
+NBCD will fail when the NBCD prediction area was zero for a given
+state/nlcd/gap combination.
+
+#+BEGIN_SRC R :results output org replace :exports both
+countyAreaCheck <- 
+  data.table( cast(
+    statsNbcdCounty,
+    state + county + nlcd + gap ~ nbcd,
+    value= "n"))
+
+countyAreaCheck <-
+  countyAreaCheck[ `FALSE` > 0 & `TRUE` == 0]
+setkey( countyAreaCheck, state, county, nlcd, gap)
+
+
+statsNbcdCountyTrue <- statsNbcdCounty[ I( nbcd)][, nbcd := NULL]
+setkey( statsNbcdCountyTrue, state, county, nlcd, gap)
+
+statsNbcdCountyFalse <- statsNbcdCounty[ !nbcd][, nbcd := NULL]
+setkey( statsNbcdCountyFalse, state, county, nlcd, gap)
+
+statsNbcdCountyTrue[ statsNbcdCountyFalse][ is.na( aldb)]
+
+cast(
+  data.frame(
+    statsNbcdCounty[ !nbcd]),
+    ## statsNbcdCountyTrue[ statsNbcdCountyFalse][ is.na( aldb)]),
+  nlcd ~ gap,
+  value= "ha",
+  fun= sum,
+  margins= TRUE)
+
+
+aldbIgnoringGap <-
+  statsNbcdCounty[ I( nbcd),
+                  list(
+                    aldb= weighted.mean(
+                      aldb, n, na.rm= TRUE)),
+                  keyby= "state,county,nlcd"]
+
+
+cast(
+  data.frame(
+    ),
+  nlcd ~ gap,
+  value= "ha.1",
+  fun= sum,
+  margins= TRUE)
+
+
+cast(
+  data.frame(
+    statsNbcdCounty),
+  nlcd ~ gap,
+  value= "ha",
+  fun= sum,
+  margins= TRUE)
+
+
+statsNbcdCounty[ !nbcd, ha,
+  keyby= "state,county,nlcd,gap"][
+    statsNbcdCounty[, ha,
+      keyby= "state,county,nlcd,gap"],
+    nomatch=0][,
+      list( haFalse= sum( ha),
+           haTotal= sum( ha.1)), by="nlcd,gap"]
+
+notModeledByNbcd <- 
+  statsNbcdCounty[ !nbcd, ha, keyby= "state,county,nlcd,gap"][
+    statsNbcdCounty[ , list( totHa= sum(ha)), keyby= "state,county,nlcd,gap"], nomatch=0][,
+      list( ha= sum(ha), totHa= sum( totHa)), keyby= "nlcd,gap"]
+
+
+notModeledPcts <- 
+  data.frame(
+    notModeledByNbcd[,
+      pct := ha / totHa * 100])
+
+within( notModeledPcts, {
+  nlcd <- factor(nlcd, levels= names( nlcdCovers), labels= nlcdCovers)
+}
+                                         
+ascii(
+  cast(
+    within(
+      notModeledPcts,
+      nlcd <- factor(
+        nlcd,
+        levels= names( nlcdCovers),
+        labels= nlcdCovers)),
+    nlcd ~ gap, value= "pct"),
+  digits=3,
+  include.rownames= FALSE,
+  colnames= c( "NLCD", "unprotected", "protected"),
+  align= c( "l", "r", "r")) 
+#+END_SRC
+
+*** TODO Make a table of these results
+
+#+begin_src R :results output org replace :exports results
+suppressWarnings(
+  ascii( 
+    cast(
+      statsNbcdCounty[, list(aldbMt = sum( aldb * ha)/ 10^6),
+                      by= "state,gap"],
+      formula= state ~ gap,
+      value= "aldbMt",
+      margins= TRUE,
+      fun= sum),
+    include.rownames= FALSE,
+    digits= 0))
+#+end_src
+
+#+results:
+#+BEGIN_ORG
+| state | FALSE | TRUE | (all) |
+|-------+-------+------+-------|
+| 00    | 0     | 0    | 0     |
+| 01    | 829   | 49   | 878   |
+| 04    | 29    | 268  | 297   |
+| 05    | 592   | 156  | 749   |
+| 06    | 823   | 1287 | 2111  |
+| 08    | 152   | 534  | 687   |
+| 09    | 123   | 21   | 144   |
+| 10    | 17    | 5    | 22    |
+| 11    | 1     | 0    | 1     |
+| 12    | 430   | 179  | 609   |
+| 13    | 857   | 97   | 954   |
+| 16    | 128   | 666  | 795   |
+| 17    | 221   | 32   | 254   |
+| 18    | 258   | 31   | 289   |
+| 19    | 105   | 6    | 112   |
+| 20    | 70    | 3    | 72    |
+| 21    | 618   | 64   | 682   |
+| 22    | 504   | 68   | 572   |
+| 23    | 629   | 141  | 770   |
+| 24    | 132   | 31   | 163   |
+| 25    | 162   | 62   | 224   |
+| 26    | 521   | 252  | 773   |
+| 27    | 260   | 254  | 514   |
+| 28    | 659   | 69   | 728   |
+| 29    | 534   | 93   | 627   |
+| 30    | 186   | 672  | 858   |
+| 31    | 37    | 4    | 41    |
+| 32    | 14    | 126  | 141   |
+| 33    | 205   | 95   | 300   |
+| 34    | 97    | 55   | 152   |
+| 35    | 95    | 233  | 327   |
+| 36    | 860   | 297  | 1157  |
+| 37    | 812   | 154  | 965   |
+| 38    | 20    | 7    | 27    |
+| 39    | 444   | 47   | 492   |
+| 40    | 285   | 33   | 318   |
+| 41    | 606   | 1229 | 1835  |
+| 42    | 828   | 270  | 1098  |
+| 44    | 18    | 6    | 24    |
+| 45    | 447   | 56   | 503   |
+| 46    | 24    | 30   | 54    |
+| 47    | 629   | 102  | 730   |
+| 48    | 653   | 66   | 719   |
+| 49    | 68    | 242  | 310   |
+| 50    | 219   | 60   | 279   |
+| 51    | 765   | 155  | 920   |
+| 53    | 582   | 1007 | 1589  |
+| 54    | 666   | 110  | 776   |
+| 55    | 471   | 95   | 566   |
+| 56    | 48    | 287  | 335   |
+| (all) | 17736 | 9807 | 27543 |
+#+END_ORG
+
+
+*** write out the results
+
+#+begin_src R
 
 write.csv(
-  statsNbcdCounty,
+  statsNbcdCounty[, list( state, county, nlcd, gap, nbcd, aldb, ha, frac)],
   row.names= FALSE,
   file= "pad-us_nlcd/nbcdCountySerial.csv",
   quote= FALSE)
@@ -1437,7 +1766,7 @@ nbcdCountyAldb <-
     cast(
       data= statsNbcdCounty,
       formula= state + county ~ gap + nlcd,
-      value= "aldb2"),
+      value= "aldb"),
     key= "state,county")
 
 setnames(
@@ -1453,7 +1782,7 @@ nbcdCountyAldbMeans <-
   data.table(
     cast(
       data=
-      statsNbcdCounty[, list( aldbAve= weighted.mean( aldb2, ha,
+      statsNbcdCounty[, list( aldbAve= weighted.mean( aldb, ha,
                                 na.rm= TRUE)),
                       by= c( "state", "county", "gap")],
       formula= state + county ~ gap,
@@ -1624,25 +1953,28 @@ zip(
 library( ggplot2)
 library( scales)
 
+## totalTonnes <-
+##   statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
+##                   keyby= "gap,nlcd"]
+
+## totalTonnes[, labelY := aldb/2 + c(0, cumsum( aldb)[-length( aldb)])]
+
+## totalTonnes[, pct := round( aldb / sum( aldb) *100, 1)]
+## totalTonnes[, label := ifelse( pct >= 0.5,
+##                 sprintf( "%s, %3.1f%%", nlcd, pct), "")]
+
+## totalTonnes[, label := sprintf( "%s, %d%%", nlcd, pct)]
+
+
+
 totalTonnes <-
-  statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
-                  keyby= "gap,nlcd"]
-
-totalTonnes[, labelY := aldb/2 + c(0, cumsum( aldb)[-length( aldb)])]
-
-totalTonnes[, pct := round( aldb / sum( aldb) *100, 1)]
-totalTonnes[, label := ifelse( pct >= 0.5,
-                sprintf( "%s, %3.1f%%", nlcd, pct), "")]
-
-totalTonnes[, label := sprintf( "%s, %d%%", nlcd, pct)]
-
-
-
-totalTonnes <-
-  statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
+  statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE),
+                         ha= sum( ha, na.rm= TRUE)),
                   keyby= "nlcd,gap"]
 totalTonnes <-
-  totalTonnes[, frac := aldb / sum( aldb)]
+  totalTonnes[, aldbFrac := aldb / sum( aldb)]
+totalTonnes <-
+  totalTonnes[, haFrac := ha / sum( ha)]
 
 nlcdColors <-
   c(
@@ -1694,10 +2026,10 @@ totalTonnes[, list( gap, nlcd,
             key= "nlcd"][ nlcdMeta]
 
 totalTonnes <-
-  totalTonnes[, nlcd := reorder( factor(nlcd), frac, max)]
+  totalTonnes[, nlcd := reorder( factor(nlcd), aldbFrac, max)]
 setkey( totalTonnes, nlcd)
 
-with( totalTonnes, reorder( factor(nlcd), frac, max))
+## with( totalTonnes, reorder( factor(nlcd), frac, max))
 
 
 ( massFracPlot <-
@@ -1705,7 +2037,7 @@ with( totalTonnes, reorder( factor(nlcd), frac, max))
    totalTonnes,
    aes(
      x= nlcd,
-     y= frac,
+     y= aldbFrac,
      color= gap )) +
  geom_point(
    size= 4) +
@@ -1723,17 +2055,17 @@ with( totalTonnes, reorder( factor(nlcd), frac, max))
  theme_bw())
 
 
-massFracPlot +
-  scale_y_log10(
-    limits= c(0.003, 0.35),
-    breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
-    labels= percent)
+## massFracPlot +
+##   scale_y_log10(
+##     limits= c(0.003, 0.35),
+##     breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
+##     labels= percent)
 
-last_plot() +
-  scale_y_log10(
-    limits= c(0.003, 0.35),
-    breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
-    labels= percent)
+## last_plot() +
+##   scale_y_log10(
+##     limits= c(0.003, 0.35),
+##     breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
+##     labels= percent)
 
 #+end_src
    
@@ -1742,10 +2074,10 @@ last_plot() +
 
 suppressWarnings(
   massFracPlot %+%
-  as.data.frame( totalTonnes[ frac > 0.003]) +
+  as.data.frame( totalTonnes[ aldbFrac > 0.003]) +
   scale_x_discrete(
     ## breaks= nlcdCovers[ as.character( totalTonnes[ frac > 0.003]$nlcd)],
-    labels= nlcdCovers[ as.character( totalTonnes[ frac > 0.003]$nlcd),
+    labels= nlcdCovers[ as.character( totalTonnes[ aldbFrac > 0.003]$nlcd),
       drop= TRUE]))
 
 #+END_SRC
@@ -1753,3 +2085,62 @@ suppressWarnings(
 #+results:
 [[file:pad-us_nlcd/images/massFracPlot.png]]
 
+#+BEGIN_SRC R :results output graphics :exports both :results replace :file pad-us_nlcd/images/areaFracPlot.png
+
+totalTonnes <-
+  totalTonnes[, nlcd := reorder( factor(nlcd), haFrac, max)]
+setkey( totalTonnes, nlcd)
+
+( areaFracPlot <-
+ ggplot(
+   totalTonnes,
+   aes(
+     x= nlcd,
+     y= haFrac,
+     color= gap )) +
+ geom_point(
+   size= 4) +
+ scale_x_discrete(
+   name= "NLCD 2001 v1", ## ) +
+   labels= nlcdMeta[ J( levels( totalTonnes$nlcd))][, cover]) +
+ ylab( "Total area fraction") +
+ scale_color_manual(
+   values= c( ## "#8C510A",
+     "#D8B365", ## 0xF6E8C3; 0xC7EAE5;
+     "#5AB4AC" ## "#01665E"
+     )) + 
+ coord_flip() +
+ labs( colour= "Protected") +
+ theme_bw())
+
+## suppressWarnings(
+##   massFracPlot %+%
+##   as.data.frame( totalTonnes) + ##[ haFrac > 0.003]) +
+##  ylab( "Total area fraction") +
+##   scale_x_discrete(
+##     labels= nlcdCovers[ as.character( totalTonnes$nlcd), ##[ haFrac > 0.003]$nlcd),
+##       drop= TRUE]))
+
+#+END_SRC
+
+#+results:
+[[file:pad-us_nlcd/images/areaFracPlot.png]]
+
+#+begin_src R
+
+zip(
+  "pad-us_nlcd.zip",
+  list.files( "pad-us_nlcd/images", "png$", full.names=TRUE))
+file.copy(
+  from= list.files( "pad-us_nlcd/images", full.names= TRUE), 
+  to=   "~/Dropbox/Carbon Inventory/images",
+  overwrite= TRUE)
+
+file.copy(
+  from= "pad-us_nlcd.zip",
+  to=   "~/Dropbox/Carbon Inventory",
+  overwrite= TRUE)
+
+#+end_src
+
+*** TODO Work out a way to update changed files in the output .zip archive
