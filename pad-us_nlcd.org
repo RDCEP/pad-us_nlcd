@@ -494,6 +494,7 @@ r.mask -r
 
 ** TODO decide whether or not to throw out the other NLCD results
 
+
 * aggregate the PAD-US results
    :PROPERTIES:
    :eval:     no
@@ -750,7 +751,7 @@ setkeyv( rawCountyStats, keycols)
 
 #+end_src
 
-** zero out pixel counts for low-carbon forest observations
+** collapse the records for GAP values that are no longer differentiated
 
 
 #+begin_src R
@@ -817,9 +818,6 @@ qplot(
 #+END_SRC
 
 #+results: forestHistDetail
-[[file:pad-us_nlcd/images/forestHistDetail.png]]
-
-#+results:
 [[file:pad-us_nlcd/images/forestHistDetail.png]]
 
 ** COMMENT by NBCD mapping zones
@@ -1077,37 +1075,37 @@ GAP TRUE/FALSE naming, . . .
 **** TODO Figure out how to do self-join in functional form
 
 #+begin_src R
-
-statsNbcdState <- `[`(
-  x= rawStateStats,
-  j= list(
-    aldb= weighted.mean( aldb, n),
-    n= sum( n),
-    ha= sum(n) * 30^2 / 10^4),
-  keyby= "state,nlcd,gap,nbcd")
-
-stateAreas <- `[`(
-  x= statsNbcdState ,
-  j= list( totHa= sum(ha)),
-  keyby= "state")
-
-statsNbcdState <-
-  statsNbcdState[ stateAreas][, frac:= ha / totHa][, totHa := NULL]
-
-
-## statsNbcdState <- `[`(
-##   x= `[`(
-##     x= statsNbcdState,
-##     j= list( stateAreas)) ,
-##   j= frac:= ha / totHa)
-
-## `[`( x= statsNbcdState, j= stateAreas)
-
-## `[`( x= statsNbcdState,
-##     j= list(
-##       names( statsNbcdState),
-##       frac= ha / sum( .SD[, ha])),
-##     keyby= "state")
+  
+  statsNbcdState <- `[`(
+    x= rawStateStats,
+    j= list(
+      aldb= weighted.mean( aldb, n),
+      n= sum( n),
+      ha= sum(n) * 30^2 / 10^4),
+    keyby= "state,nlcd,gap,nbcd")
+  
+  stateAreas <- `[`(
+    x= statsNbcdState ,
+    j= list( totHa= sum(ha)),
+    keyby= "state")
+  
+  statsNbcdState <-
+    statsNbcdState[ stateAreas][, frac:= ha / totHa][, totHa := NULL]
+  
+  
+  ## statsNbcdState <- `[`(
+  ##   x= `[`(
+  ##     x= statsNbcdState,
+  ##     j= list( stateAreas)) ,
+  ##   j= frac:= ha / totHa)
+  
+  ## `[`( x= statsNbcdState, j= stateAreas)
+  
+  ## `[`( x= statsNbcdState,
+  ##     j= list(
+  ##       names( statsNbcdState),
+  ##       frac= ha / sum( .SD[, ha])),
+  ##     keyby= "state")
 #+end_src
 
 
@@ -1209,9 +1207,9 @@ ggplot(
 #+end_src
 
 
-*** backfill the null state densities with national means
+*** COMMENT backfill the null state densities with national means
 
-#+begin_src R
+#+begin_src R :eval no
 ## statsNbcdState <-
 ##   merge( statsNbcdState, nbcdMean, all.x= TRUE)
 ## statsNbcdState[ is.na( aldb2), aldb2 := aldb.y][, aldb.y := NULL]
@@ -1222,6 +1220,19 @@ ggplot(
 ## test
 ## any( abs( statsNbcdState[, list( frac= sum(frac)), by= state][, frac] - 1) > 0.001)
 
+#+end_src
+
+
+*** calculate the grand total
+
+#+begin_src R
+  statsNbcdState[ I( nbcd), list( Gt= sum( aldb * ha) / 10^9)]
+#+end_src
+
+
+*** write out the state data in long form
+
+#+begin_src R
 
 write.csv(
   statsNbcdState[, list( state,nlcd,gap,nbcd,aldb,n,ha,frac)],
@@ -1239,234 +1250,248 @@ zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdStateSerial.csv")
 
 
 #+begin_src R
-
-nbcdStateAldb <- 
-  data.table(
-    cast(
-      data= statsNbcdState,
-      subset= nbcd,
-      formula= state ~ gap + nlcd,
-      value= "aldb"),
-    key= "state")
-
-setnames(
-  nbcdStateAldb,
-  colnames( nbcdStateAldb),
-  str_replace(
-    str_replace(
-      colnames(nbcdStateAldb),
-      "TRUE_", "yes"),
-    "FALSE_", "no"))
-
-
-nbcdStateAldbMeans <- 
-  data.table(
-    cast(
-      data=
-      statsNbcdState[
-        I( nbcd),
-        list( aldbAve= weighted.mean( aldb, ha)),
-        by= c( "state", "gap")],
-      formula= state ~ gap,
-      value= "aldbAve"),
-    key= "state")
-
-setnames(
-  nbcdStateAldbMeans,
-  c( "FALSE", "TRUE"),
-  c( "noAll", "yesAll"))
-
-nbcdStateGapFrac <-
-  data.table(
-    cast(
-      data= statsNbcdState,
-      formula= state ~ gap,
-      value= "frac",
-      fun.aggregate= sum,
-      na.rm = TRUE),
-    key= "state")
-
-setnames(
-  nbcdStateGapFrac,
-  c( "FALSE", "TRUE"),
-  c( "noAllFr", "yesAllFr"))
-
-nbcdStateGapHa <-
-  data.table(
-    cast(
-      data= statsNbcdState,
-      formula= state ~ gap,
-      value= "ha",
-      fun.aggregate= sum,
-      na.rm= TRUE),
-    key= "state")
-
-setnames(
-  nbcdStateGapHa,
-  c( "FALSE", "TRUE"),
-  c( "noAllHa", "yesAllHa"))
-
-nbcdStateFrac <- 
-  data.table(
-    cast(
-      data= statsNbcdState,
-      subset= nbcd,
-      formula= state ~ gap + nlcd,
-      value= "frac"),
-    key= "state")
-
-setnames(
-  nbcdStateFrac,
-  colnames( nbcdStateFrac)[ -1],
-  paste(
+  
+  nbcdStateAldb <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= nbcd,
+        formula= state ~ gap + nlcd,
+        value= "aldb"),
+      key= "state")
+  
+  setnames(
+    nbcdStateAldb,
+    colnames( nbcdStateAldb),
     str_replace(
       str_replace(
-        colnames( nbcdStateFrac)[ -1],
+        colnames(nbcdStateAldb),
         "TRUE_", "yes"),
-      "FALSE_", "no"),
-    "Fr", sep= ""))
-
-nbcdNullStateFrac <- 
-  data.table(
-    cast(
-      data= statsNbcdState,
-      subset= !nbcd,
-      formula= state ~ gap + nlcd,
-      value= "frac"),
-    key= "state")
-
-setnames(
-  nbcdNullStateFrac,
-  colnames( nbcdNullStateFrac)[ -1],
-  paste(
-    str_replace(
+      "FALSE_", "no"))
+  
+  
+  nbcdStateAldbMeans <- 
+    data.table(
+      cast(
+        data=
+        statsNbcdState[
+          I( nbcd),
+          list( aldbAve= weighted.mean( aldb, ha)),
+          by= c( "state", "gap")],
+        formula= state ~ gap,
+        value= "aldbAve"),
+      key= "state")
+  
+  setnames(
+    nbcdStateAldbMeans,
+    c( "FALSE", "TRUE"),
+    c( "noAll", "yesAll"))
+  
+  nbcdStateGapFrac <-
+    data.table(
+      cast(
+        data= statsNbcdState,
+        formula= state ~ gap,
+        value= "frac",
+        fun.aggregate= sum,
+        na.rm = TRUE),
+      key= "state")
+  
+  setnames(
+    nbcdStateGapFrac,
+    c( "FALSE", "TRUE"),
+    c( "noAllFr", "yesAllFr"))
+  
+  nbcdStateGapHa <-
+    data.table(
+      cast(
+        data= statsNbcdState,
+        formula= state ~ gap,
+        value= "ha",
+        fun.aggregate= sum,
+        na.rm= TRUE),
+      key= "state")
+  
+  setnames(
+    nbcdStateGapHa,
+    c( "FALSE", "TRUE"),
+    c( "noAllHa", "yesAllHa"))
+  
+  nbcdStateGapHa <-
+    data.table(
+      cast(
+        data= statsNbcdState[, list( ha=sum( ha)),
+          keyby= "state,gap,nbcd"],
+        formula= state ~ gap + nbcd,
+        value= "ha"),
+      key= "state")
+  
+  setnames(
+    nbcdStateGapHa,
+    c( "FALSE_FALSE", "FALSE_TRUE", "TRUE_FALSE", "TRUE_TRUE"),
+    c( "noAllHaN", "noAllHa", "yesAllHaN", "yesAllHa"))
+  
+  nbcdStateFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= nbcd,
+        formula= state ~ gap + nlcd,
+        value= "frac"),
+      key= "state")
+  
+  setnames(
+    nbcdStateFrac,
+    colnames( nbcdStateFrac)[ -1],
+    paste(
       str_replace(
-        colnames( nbcdNullStateFrac)[ -1],
-        "TRUE_", "yes"),
-      "FALSE_", "no"),
-    "FrN", sep= ""))
-
-nbcdStateHa <- 
-  data.table(
-    cast(
-      data= statsNbcdState,
-      subset= nbcd,
-      formula= state ~ gap + nlcd,
-      value= "ha"),
-    key= "state")
-
-setnames(
-  nbcdStateHa,
-  colnames( nbcdStateHa)[ -1],
-  paste(
-    str_replace(
+        str_replace(
+          colnames( nbcdStateFrac)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Fr", sep= ""))
+  
+  nbcdNullStateFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= !nbcd,
+        formula= state ~ gap + nlcd,
+        value= "frac"),
+      key= "state")
+  
+  setnames(
+    nbcdNullStateFrac,
+    colnames( nbcdNullStateFrac)[ -1],
+    paste(
       str_replace(
-        colnames( nbcdStateHa)[ -1],
-        "TRUE_", "yes"),
-      "FALSE_", "no"),
-    "Ha", sep= ""))
-
-nbcdNullStateHa <- 
-  data.table(
-    cast(
-      data= statsNbcdState,
-      subset= !nbcd,
-      formula= state ~ gap + nlcd,
-      value= "ha"),
-    key= "state")
-
-setnames(
-  nbcdNullStateHa,
-  colnames( nbcdNullStateHa)[ -1],
-  paste(
-    str_replace(
+        str_replace(
+          colnames( nbcdNullStateFrac)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "FrN", sep= ""))
+  
+  nbcdStateHa <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= nbcd,
+        formula= state ~ gap + nlcd,
+        value= "ha"),
+      key= "state")
+  
+  setnames(
+    nbcdStateHa,
+    colnames( nbcdStateHa)[ -1],
+    paste(
       str_replace(
-        colnames( nbcdNullStateHa)[ -1],
-        "TRUE_", "yes"),
-      "FALSE_", "no"),
-    "HaN", sep= ""))
-
-nbcdState <-
-  nbcdStateAldb[ nbcdStateAldbMeans]
-nbcdState <-
-  nbcdState[ nbcdStateGapFrac][ nbcdStateGapHa]
-nbcdState <-
-  nbcdState[ nbcdStateFrac][ nbcdStateHa]
-nbcdState <-
-  nbcdState[ nbcdNullStateFrac][ nbcdNullStateHa]
-
-setnames(
-  nbcdState,
-  "state", "fips")
-
-setcolorder(
-  nbcdState,
-  order( colnames( nbcdState)))
-
-nbcdStateChar <-
-  str_trim(
-    format.df(
-      nbcdState,
-      cdec= sapply(
-        colnames( nbcdState),
-        function( x) {
-          ifelse(
-            x == "fips", 0,
+        str_replace(
+          colnames( nbcdStateHa)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Ha", sep= ""))
+  
+  nbcdNullStateHa <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= !nbcd,
+        formula= state ~ gap + nlcd,
+        value= "ha"),
+      key= "state")
+  
+  setnames(
+    nbcdNullStateHa,
+    colnames( nbcdNullStateHa)[ -1],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdNullStateHa)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "HaN", sep= ""))
+  
+  nbcdState <-
+    nbcdStateAldb[ nbcdStateAldbMeans]
+  nbcdState <-
+    nbcdState[ nbcdStateGapFrac][ nbcdStateGapHa]
+  nbcdState <-
+    nbcdState[ nbcdStateFrac][ nbcdStateHa]
+  nbcdState <-
+    nbcdState[ nbcdNullStateFrac][ nbcdNullStateHa]
+  
+  setnames(
+    nbcdState,
+    "state", "fips")
+  
+  setcolorder(
+    nbcdState,
+    order( colnames( nbcdState)))
+  
+  nbcdStateChar <-
+    str_trim(
+      format.df(
+        nbcdState,
+        cdec= sapply(
+          colnames( nbcdState),
+          function( x) {
             ifelse(
-              str_detect( x, "HaN?$"), 1,
+              x == "fips", 0,
               ifelse(
-                str_detect( x, "FrN?$"), 3,
-                1)))
-        }),
-      numeric.dollar= FALSE,
-      na.blank= TRUE))
-
-write.csv(
-  nbcdStateChar,
-  row.names= FALSE,
-  file= "pad-us_nlcd/nbcdState.csv",
-  quote= FALSE)
-
-zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdState.csv")
-
-options(useFancyQuotes = FALSE)
-cat(
-  sapply(
-    colnames( nbcdState),
-    function( x) {
-      dQuote(
-        ifelse(
-          x == "fips", "String(2)",
+                str_detect( x, "HaN?$"), 1,
+                ifelse(
+                  str_detect( x, "FrN?$"), 3,
+                  1)))
+          }),
+        numeric.dollar= FALSE,
+        na.blank= TRUE))
+  
+  write.csv(
+    nbcdStateChar,
+    row.names= FALSE,
+    file= "pad-us_nlcd/nbcdState.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdState.csv")
+  
+  options(useFancyQuotes = FALSE)
+  cat(
+    sapply(
+      colnames( nbcdState),
+      function( x) {
+        dQuote(
           ifelse(
-            str_detect( x, "HaN?$"),
-            "Real(10.1)",
+            x == "fips", "String(2)",
             ifelse(
-              str_detect( x, "FrN?$"),
-              "Real(5.3)",
-              "Real(5.1)"))))
-    }),
-  sep= ",",
-  file= "pad-us_nlcd/nbcdState.csvt")
-options(useFancyQuotes = TRUE)
-
-ogr2ogr <-
-  paste(
-    "ogr2ogr -overwrite -progress -sql",
-    sprintf(
-      "\"select %s from cusaStatesAea a",
-      paste( colnames( nbcdState), collapse= ",")),
-    "left join 'pad-us_nlcd/nbcdState.csv'.nbcdState b",
-    "on a.GEOID10 = b.fips\"",
-    "pad-us_nlcd/nbcdState.shp shp/cusaStatesAea.shp")
-
-system( ogr2ogr)
-
-zip(
-  "pad-us_nlcd.zip",
-  list.files(
-    path= "pad-us_nlcd",
-    pattern= "^nbcdState\\.[a-z]{3}",
-    full.names= TRUE))
+              str_detect( x, "HaN?$"),
+              "Real(10.1)",
+              ifelse(
+                str_detect( x, "FrN?$"),
+                "Real(5.3)",
+                "Real(5.1)"))))
+      }),
+    sep= ",",
+    file= "pad-us_nlcd/nbcdState.csvt")
+  options(useFancyQuotes = TRUE)
+  
+  ogr2ogr <-
+    paste(
+      "ogr2ogr -overwrite -progress -sql",
+      sprintf(
+        "\"select %s from cusaStatesAea a",
+        paste( colnames( nbcdState), collapse= ",")),
+      "left join 'pad-us_nlcd/nbcdState.csv'.nbcdState b",
+      "on a.GEOID10 = b.fips\"",
+      "pad-us_nlcd/nbcdState.shp shp/cusaStatesAea.shp")
+  
+  system( ogr2ogr)
+  
+  zip(
+    "pad-us_nlcd.zip",
+    list.files(
+      path= "pad-us_nlcd",
+      pattern= "^nbcdState\\.[a-z]{3}",
+      full.names= TRUE))
 #+end_src
 
 
@@ -1477,57 +1502,54 @@ zip(
 ** repeat for counties
 
 #+begin_src R
-## library( reshape)
-## library( Hmisc)
-## library( data.table)
-## library( stringr)
-
-statsNbcdCounty <-
-  rawCountyStats[, list(
-    aldb= weighted.mean( aldb, n),
-    aldb2= weighted.mean( aldb, n2),
-    n= sum( n),
-    n2= sum( n2),
-    ha= sum(n) * 30^2 / 10^4,
-    ha2= sum(n2) * 30^2 / 10^4),
-                 keyby= "state,county,nlcd,gap,nbcd"]
-countyAreas <-
-  statsNbcdCounty[, list( totHa= sum(ha)),
-                  keyby= c( "state", "county")]
-statsNbcdCounty <-
-  statsNbcdCounty[ countyAreas][, frac:=ha/totHa]
+  ## library( reshape)
+  ## library( Hmisc)
+  ## library( data.table)
+  ## library( stringr)
   
-## statsNbcdCounty <-
-##   merge(
-##     statsNbcdCounty,
-##     statsNbcdState[, list( state, nlcd, gap, aldb2, n2)],
-##     by= c( "state", "nlcd", "gap"),
-##     all.x= TRUE)
-
-## statsNbcdCounty[, fill := as.character(NA)]
-
-## statsNbcdCounty[ n2.x == 0 & n2.y == 0, fill := "cUSA"]
-## statsNbcdCounty[ n2.x == 0 & n2.y != 0, fill := "state"]
-
-## statsNbcdCounty[ is.na( aldb2.x), aldb2.x := aldb2.y]
-## statsNbcdCounty[, aldb2.y := NULL]
-## statsNbcdCounty[,    n2.y := NULL]
-## statsNbcdCounty[,   totHa := NULL]
-
-## setkey( statsNbcdCounty, state, county, nlcd, gap)
-## setnames(
-##   statsNbcdCounty,
-##   c( "aldb2.x", "n2.x"),
-##   c( "aldb2",   "n2"))
-
-## setcolorder(
-##   statsNbcdCounty,
-##   c( "state", "county", "nlcd", "gap",
-##     "aldb", "aldb2", "n", "n2", "ha", "ha2",
-##     "frac", "fill"))
-
-## test
-## any( abs( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1) > 0.001)
+  statsNbcdCounty <-
+    rawCountyStats[, list(
+      aldb= weighted.mean( aldb, n),
+      n= sum( n),
+      ha= sum(n) * 30^2 / 10^4),
+                   keyby= "state,county,nlcd,gap,nbcd"]
+  countyAreas <-
+    statsNbcdCounty[, list( totHa= sum(ha)),
+                    keyby= c( "state", "county")]
+  statsNbcdCounty <-
+    statsNbcdCounty[ countyAreas][, frac:=ha/totHa]
+    
+  ## statsNbcdCounty <-
+  ##   merge(
+  ##     statsNbcdCounty,
+  ##     statsNbcdState[, list( state, nlcd, gap, aldb2, n2)],
+  ##     by= c( "state", "nlcd", "gap"),
+  ##     all.x= TRUE)
+  
+  ## statsNbcdCounty[, fill := as.character(NA)]
+  
+  ## statsNbcdCounty[ n2.x == 0 & n2.y == 0, fill := "cUSA"]
+  ## statsNbcdCounty[ n2.x == 0 & n2.y != 0, fill := "state"]
+  
+  ## statsNbcdCounty[ is.na( aldb2.x), aldb2.x := aldb2.y]
+  ## statsNbcdCounty[, aldb2.y := NULL]
+  ## statsNbcdCounty[,    n2.y := NULL]
+  ## statsNbcdCounty[,   totHa := NULL]
+  
+  ## setkey( statsNbcdCounty, state, county, nlcd, gap)
+  ## setnames(
+  ##   statsNbcdCounty,
+  ##   c( "aldb2.x", "n2.x"),
+  ##   c( "aldb2",   "n2"))
+  
+  ## setcolorder(
+  ##   statsNbcdCounty,
+  ##   c( "state", "county", "nlcd", "gap",
+  ##     "aldb", "aldb2", "n", "n2", "ha", "ha2",
+  ##     "frac", "fill"))
+  
+  ## test
+  ## any( abs( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1) > 0.001)
 #+end_src
 
 *** check for cases where NBCD makes no prediction
@@ -1634,6 +1656,7 @@ ascii(
   align= c( "l", "r", "r")) 
 #+END_SRC
 
+
 *** TODO Make a table of these results
 
 #+begin_src R :results output org replace :exports results
@@ -1708,7 +1731,14 @@ suppressWarnings(
 #+END_ORG
 
 
-*** write out the results
+*** calculate the grand total
+
+#+begin_src R
+  statsNbcdCounty[ I( nbcd), list( Gt= sum( aldb * ha) / 10^9)]
+#+end_src
+
+
+*** write out the results in long form
 
 #+begin_src R
 
@@ -1720,233 +1750,237 @@ write.csv(
 
 zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCountySerial.csv")
 
-nbcdCountyAldb <- 
-  data.table(
-    cast(
-      data= statsNbcdCounty,
-      subset= nbcd,
-      formula= state + county ~ gap + nlcd,
-      value= "aldb"),
-    key= "state,county")
+#+end_src
 
-setnames(
-  nbcdCountyAldb,
-  colnames( nbcdCountyAldb),
-  str_replace(
-    str_replace(
-      colnames( nbcdCountyAldb),
-      "TRUE_", "yes"),
-    "FALSE_", "no"))
+*** cross-tabulate the county data
 
-nbcdCountyAldbMeans <- 
-  data.table(
-    cast(
-      data=
-      statsNbcdCounty[
-        I( nbcd),
-        list( aldbAve= weighted.mean( aldb, ha, na.rm= TRUE)),
-        by= c( "state", "county", "gap")],
-      formula= state + county ~ gap,
-      value= "aldbAve"),
-    key= "state,county")
-
-setnames(
-  nbcdCountyAldbMeans,
-  c( "FALSE", "TRUE"),
-  c( "noAll", "yesAll"))
-
-nbcdCountyGapFrac <-
-  data.table(
-    cast(
-      data= statsNbcdCounty,
-      formula= state + county ~ gap,
-      value= "frac",
-      fun.aggregate= sum,
-      na.rm= TRUE),
-    key= "state,county")
-
-setnames(
-  nbcdCountyGapFrac,
-  c( "FALSE", "TRUE"),
-  c( "noAllFr", "yesAllFr"))
-
-nbcdCountyGapHa <-
-  data.table(
-    cast(
-      data= statsNbcdCounty,
-      formula= state + county ~ gap,
-      value= "ha",
-      fun.aggregate= sum,
-      na.rm= TRUE),
-    key= "state,county")
-
-setnames(
-  nbcdCountyGapHa,
-  c( "FALSE", "TRUE"),
-  c( "noAllHa", "yesAllHa"))
-
-nbcdCountyFrac <- 
-  data.table(
-    cast(
-      data= statsNbcdCounty,
-      subset= nbcd,
-      formula= state + county ~ gap + nlcd,
-      value= "frac"),
-    key= "state,county")
-
-setnames(
-  nbcdCountyFrac,
-  colnames( nbcdCountyFrac)[ -(1:2)],
-  paste(
+#+begin_src R
+  nbcdCountyAldb <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "aldb"),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyAldb,
+    colnames( nbcdCountyAldb),
     str_replace(
       str_replace(
-        colnames( nbcdCountyFrac)[ -(1:2)],
+        colnames( nbcdCountyAldb),
         "TRUE_", "yes"),
-      "FALSE_", "no"),
-    "Fr", sep= ""))
-
-nbcdNullCountyFrac <- 
-  data.table(
-    cast(
-      data= statsNbcdCounty,
-      subset= !nbcd,
-      formula= state + county ~ gap + nlcd,
-      value= "frac"),
-    key= "state,county")
-
-setnames(
-  nbcdNullCountyFrac,
-  colnames( nbcdNullCountyFrac)[ -(1:2)],
-  paste(
-    str_replace(
+      "FALSE_", "no"))
+  
+  nbcdCountyAldbMeans <- 
+    data.table(
+      cast(
+        data=
+        statsNbcdCounty[
+          I( nbcd),
+          list( aldbAve= weighted.mean( aldb, ha, na.rm= TRUE)),
+          by= c( "state", "county", "gap")],
+        formula= state + county ~ gap,
+        value= "aldbAve"),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyAldbMeans,
+    c( "FALSE", "TRUE"),
+    c( "noAll", "yesAll"))
+  
+  nbcdCountyGapFrac <-
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        formula= state + county ~ gap,
+        value= "frac",
+        fun.aggregate= sum,
+        na.rm= TRUE),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyGapFrac,
+    c( "FALSE", "TRUE"),
+    c( "noAllFr", "yesAllFr"))
+  
+  nbcdCountyGapHa <-
+    data.table(
+      cast(
+        data= statsNbcdCounty[, list( ha=sum( ha)),
+          keyby= "state,county,gap,nbcd"],
+        formula= state + county ~ gap + nbcd,
+        value= "ha"),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyGapHa,
+    c( "FALSE_FALSE", "FALSE_TRUE", "TRUE_FALSE", "TRUE_TRUE"),
+    c( "noAllHaN", "noAllHa", "yesAllHaN", "yesAllHa"))
+  
+  nbcdCountyFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "frac"),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyFrac,
+    colnames( nbcdCountyFrac)[ -(1:2)],
+    paste(
       str_replace(
-        colnames( nbcdNullCountyFrac)[ -(1:2)],
-        "TRUE_", "yes"),
-      "FALSE_", "no"),
-    "FrN", sep= ""))
-
-nbcdCountyHa <- 
-  data.table(
-    cast(
-      data= statsNbcdCounty,
-      subset= nbcd,
-      formula= state + county ~ gap + nlcd,
-      value= "ha",),
-    key= "state,county")
-
-setnames(
-  nbcdCountyHa,
-  colnames( nbcdCountyHa)[ -(1:2)],
-  paste(
-    str_replace(
+        str_replace(
+          colnames( nbcdCountyFrac)[ -(1:2)],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Fr", sep= ""))
+  
+  nbcdNullCountyFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= !nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "frac"),
+      key= "state,county")
+  
+  setnames(
+    nbcdNullCountyFrac,
+    colnames( nbcdNullCountyFrac)[ -(1:2)],
+    paste(
       str_replace(
-        colnames( nbcdCountyHa)[ -(1:2)],
-        "TRUE_", "yes"),
-      "FALSE_", "no"),
-    "Ha", sep= ""))
-
-nbcdNullCountyHa <- 
-  data.table(
-    cast(
-      data= statsNbcdCounty,
-      subset= !nbcd,
-      formula= state + county ~ gap + nlcd,
-      value= "ha",),
-    key= "state,county")
-
-setnames(
-  nbcdNullCountyHa,
-  colnames( nbcdNullCountyHa)[ -(1:2)],
-  paste(
-    str_replace(
+        str_replace(
+          colnames( nbcdNullCountyFrac)[ -(1:2)],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "FrN", sep= ""))
+  
+  nbcdCountyHa <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "ha",),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyHa,
+    colnames( nbcdCountyHa)[ -(1:2)],
+    paste(
       str_replace(
-        colnames( nbcdNullCountyHa)[ -(1:2)],
-        "TRUE_", "yes"),
-      "FALSE_", "no"),
-    "HaN", sep= ""))
-
-
-nbcdCounty <-
-  nbcdCountyAldb[ nbcdCountyAldbMeans]
-nbcdCounty <-
-  nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
-nbcdCounty <-
-  nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
-nbcdCounty <-
-  nbcdCounty[ nbcdNullCountyFrac][ nbcdNullCountyHa]
-
-nbcdCounty <-
-  nbcdCounty[, fips := paste( state, county, sep= "")]
-nbcdCounty <-
-  nbcdCounty[, state := NULL][, county := NULL]
-setkey( nbcdCounty, fips)
-setcolorder( nbcdCounty, order( colnames( nbcdCounty)))
-
-nbcdCountyChar <-
-  str_trim(
-    format.df(
-      nbcdCounty,
-      cdec= sapply(
-        colnames( nbcdCounty),
-        function( x)
-        ifelse(
-          x == "fips", 0,
+        str_replace(
+          colnames( nbcdCountyHa)[ -(1:2)],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Ha", sep= ""))
+  
+  nbcdNullCountyHa <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= !nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "ha",),
+      key= "state,county")
+  
+  setnames(
+    nbcdNullCountyHa,
+    colnames( nbcdNullCountyHa)[ -(1:2)],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdNullCountyHa)[ -(1:2)],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "HaN", sep= ""))
+  
+  
+  nbcdCounty <-
+    nbcdCountyAldb[ nbcdCountyAldbMeans]
+  nbcdCounty <-
+    nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
+  nbcdCounty <-
+    nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
+  nbcdCounty <-
+    nbcdCounty[ nbcdNullCountyFrac][ nbcdNullCountyHa]
+  
+  nbcdCounty <-
+    nbcdCounty[, fips := paste( state, county, sep= "")]
+  nbcdCounty <-
+    nbcdCounty[, state := NULL][, county := NULL]
+  setkey( nbcdCounty, fips)
+  setcolorder( nbcdCounty, order( colnames( nbcdCounty)))
+  
+  nbcdCountyChar <-
+    str_trim(
+      format.df(
+        nbcdCounty,
+        cdec= sapply(
+          colnames( nbcdCounty),
+          function( x)
           ifelse(
-            str_detect( x, "HaN?$"), 1,
+            x == "fips", 0,
             ifelse(
-              str_detect( x, "FrN?$"), 3,
-              1)))),
-      numeric.dollar= FALSE,
-      na.blank= TRUE))
-
-write.csv(
-  nbcdCountyChar,
-  row.names= FALSE,
-  file= "pad-us_nlcd/nbcdCounty.csv",
-  quote= FALSE)
-
-zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCounty.csv")
-
-options(useFancyQuotes = FALSE)
-cat(
-  sapply(
-    colnames( nbcdCounty),
-    function( x) {
-      dQuote(
-        ifelse(
-          x == "fips", "String(5)",
+              str_detect( x, "HaN?$"), 1,
+              ifelse(
+                str_detect( x, "FrN?$"), 3,
+                1)))),
+        numeric.dollar= FALSE,
+        na.blank= TRUE))
+  
+  write.csv(
+    nbcdCountyChar,
+    row.names= FALSE,
+    file= "pad-us_nlcd/nbcdCounty.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCounty.csv")
+  
+  options(useFancyQuotes = FALSE)
+  cat(
+    sapply(
+      colnames( nbcdCounty),
+      function( x) {
+        dQuote(
           ifelse(
-            str_detect( x, "HaN?$"),
-            "Real(10.1)",
+            x == "fips", "String(5)",
             ifelse(
-              str_detect( x, "FrN?$"),
-              "Real(5.3)",
-              "Real(5.1)"))))
-    }),
-  sep= ",",
-  file= "pad-us_nlcd/nbcdCounty.csvt")
-options(useFancyQuotes = TRUE)
-
-ogr2ogr <-
-  paste(
-    "ogr2ogr -overwrite -progress -sql",
-    sprintf(
-      "\"select %s from cusaCountiesAea a",
-      paste( colnames( nbcdCounty), collapse= ",")),
-    "left join 'pad-us_nlcd/nbcdCounty.csv'.nbcdCounty b",
-    "on a.GEOID10 = b.fips\"",
-    "pad-us_nlcd/nbcdCounty.shp shp/cusaCountiesAea.shp")
-
-system( ogr2ogr)
-
-zip(
-  "pad-us_nlcd.zip",
-  list.files(
-    path= "pad-us_nlcd",
-    pattern= "^nbcdCounty\\.[a-z]{3}$",
-    full.names= TRUE))
-
-
+              str_detect( x, "HaN?$"),
+              "Real(10.1)",
+              ifelse(
+                str_detect( x, "FrN?$"),
+                "Real(5.3)",
+                "Real(5.1)"))))
+      }),
+    sep= ",",
+    file= "pad-us_nlcd/nbcdCounty.csvt")
+  options(useFancyQuotes = TRUE)
+  
+  ogr2ogr <-
+    paste(
+      "ogr2ogr -overwrite -progress -sql",
+      sprintf(
+        "\"select %s from cusaCountiesAea a",
+        paste( colnames( nbcdCounty), collapse= ",")),
+      "left join 'pad-us_nlcd/nbcdCounty.csv'.nbcdCounty b",
+      "on a.GEOID10 = b.fips\"",
+      "pad-us_nlcd/nbcdCounty.shp shp/cusaCountiesAea.shp")
+  
+  system( ogr2ogr)
+  
+  zip(
+    "pad-us_nlcd.zip",
+    list.files(
+      path= "pad-us_nlcd",
+      pattern= "^nbcdCounty\\.[a-z]{3}$",
+      full.names= TRUE))
+  
+  
 #+end_src
 
 
