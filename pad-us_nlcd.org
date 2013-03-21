@@ -2183,3 +2183,112 @@ file.copy(
 #+end_src
 
 *** TODO Work out a way to update changed files in the output .zip archive
+
+
+* cross-tabulate HWSD soil texture classes by county
+
+#+begin_src sh :session *shell*
+  wget http://webarchive.iiasa.ac.at/Research/LUC/External-World-soil-database/HWSD_Data/HWSD_RASTER.zip
+  mkdir data/HWSD_RASTER
+  unzip HWSD_RASTER.zip -d data/HWSD_RASTER
+  mv HWSD_RASTER.zip data
+  wget http://webarchive.iiasa.ac.at/Research/LUC/External-World-soil-database/HWSD_Data/HWSD.mdb
+  mv HWSD.mdb data
+  mkdir data/HWSD
+#+end_src
+
+Extract the texture class columns and category labels from HWSD.mdb in
+Windows.
+
+Convert the topsoil relationship to GRASS reclassification rules.
+
+#+begin_src R 
+  library( doMC)
+  ## library(foreach)
+  ## library( iterators)
+  
+  registerDoMC()
+  
+  usdaTexClass <-
+    read.csv( "data/HWSD/USDA_TEX_CLASS.csv")
+  
+  usdaTexClass <-
+    within(
+      usdaTexClass,
+      T_USDA_TEX_CLASS <- ifelse(
+        is.na( T_USDA_TEX_CLASS),
+        "NULL",
+        as.character( T_USDA_TEX_CLASS)))
+  
+  reclassRules <- foreach(
+    d= iter( usdaTexClass, by= "row"),
+    .combine= c) %dopar% {
+      with( d, sprintf( "%d = %s", MU_GLOBAL, T_USDA_TEX_CLASS))
+    }
+  
+  cat( reclassRules, file= "data/HWSD/T_USDA_TEX_CLASS.reclass", sep= "\n")  
+#+end_src
+
+
+Warp the HWSD raster into the cUSA GRASS location and generate the frequency statistics.
+
+#+begin_src sh :session *grass*
+  g.proj -fw > cUSA.wkt
+  eval $(g.region -g)
+  gdalwarp -s_srs EPSG:4326 -t_srs cUSA.wkt -te $w $s $e $n -srcnodata 0 -dstnodata 0 -of VRT data/HWSD_RASTER/hwsd.bil data/HWSD_RASTER/hwsd_cUSA_aea.vrt -overwrite
+  r.in.gdal input=data/HWSD_RASTER/hwsd_cUSA_aea.vrt output=hwsd
+  r.reclass  --overwrite input=hwsd output=hwsd_T_USDA_TEX_CLASS rules=data/HWSD/T_USDA_TEX_CLASS.reclass
+  
+  echo state,county,Nlcd01v1,hwsdTopTex,n > data/statsHwsdTopsoilTexture.csv \
+      && r.stats -Nc input=states,counties,Nlcd01v1,hwsd_T_USDA_TEX_CLASS fs=, \
+      >> data/statsHwsdTopsoilTexture.csv \
+      2> data/statsHwsdTopsoilTexture.err &
+  
+#+end_src
+
+#+begin_src R :session *R*
+  library( data.table)
+  
+  stats <-
+    read.csv( "data/statsHwsdTopsoilTexture.csv",
+             na.strings= "*",
+             col.names= c( "state","county","nlcd01v1","hwsdTopTex","n"),
+             colClasses= c( "integer", "integer", "integer", "integer", "numeric"))
+  
+  stats <-
+    within(
+      stats,
+      { ## levels( hwsdTopTex) <- c( levels( hwsdTopTex), "0")
+        hwsdTopTex[ is.na( hwsdTopTex)] <- 0
+      })
+  
+  dt <- data.table( stats)
+  setkey( dt, state, county, nlcd01v1, hwsdTopTex)
+  
+  dt <- dt[, list(
+    ha= sum(n) * 30^2 / 10^4),
+           keyby= "state,county,nlcd01v1,hwsdTopTex"]
+  
+  
+  
+  ## wmCt <-
+  ##   cast(
+  ##     data= wm,
+  ##     formula= cell ~ gap + nlcd,
+  ##     ## fun.aggregate= sum,
+  ##     ## margins= "grand_col",
+  ##     value= "wm" )
+  
+  write.csv(
+    format.df(
+      dt[ !is.na( state)],
+      cdec= c( rep( 0, 4), 2),
+      numeric.dollar= FALSE,
+      na.blank= TRUE),
+    row.names= FALSE,
+    file= "data/hwsdTopTexCounty.csv",
+    quote= FALSE)
+  
+  zip( "data/hwsdTopTexCounty.zip", "data/hwsdTopTexCounty.csv")
+  
+#+end_src
