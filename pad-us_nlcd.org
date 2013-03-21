@@ -1,9 +1,9 @@
-#+TITLE:     pad-us_nlcd.org
-#+AUTHOR:    Neil Best
+#+TITLE:     Synthesis of a disaggregated carbon inventory for the conterminous United States
+#+AUTHOR:    Neil Best, Joshua Elliott
 #+EMAIL:     nbest@ci.uchicago.edu
-#+DATE:      2012-04-13 Fri
-#+DESCRIPTION:
-#+KEYWORDS:
+#+DATE:      
+#+DESCRIPTION: Where does the description appear?
+#+KEYWORDS: woody biomass, land cover, protected areas
 #+LANGUAGE:  en
 #+OPTIONS:   H:3 num:t toc:t \n:nil @:t ::t |:t ^:t -:t f:t *:t <:t
 #+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t pri:nil tags:not-in-toc
@@ -17,6 +17,9 @@
 #+PROPERTY: session *R*
 #+PROPERTY: results silent
 
+* Abstract
+
+This technical paper describes and reveals the process of combining 
 * DONE tangle out the R code and run it from the Makefile
 
 This won't work until another function call is included to run the R code.
@@ -37,6 +40,7 @@ options( asciiType= "org")
 overwriteRasters <- TRUE
 
 #+END_SRC
+
 
 * COMMENT are these obsolete?
 ** process Puerto Rico to work out steps
