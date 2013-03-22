@@ -17,12 +17,133 @@
 #+PROPERTY: session *R*
 #+PROPERTY: results silent
 
-* Abstract
+#+BEGIN_SRC emacs-lisp :results silent :exports none
+  (defun org-export-latex-no-toc (depth)  
+    (when depth
+      (format "%% Org-mode is exporting headings to %s levels.\n"
+              depth)))
+  (setq org-export-latex-format-toc-function 'org-export-latex-no-toc)
+#+END_SRC
 
-This technical paper describes and reveals the process of combining 
-* DONE tangle out the R code and run it from the Makefile
+#+BEGIN_abstract
+This technical paper describes and reveals the process of creating a
+disaggregated carbon inventory dataset based on three base datasets.
+The carbon density distribution for above-ground live dry woody
+biomass is taked from the National Biomass and Carbon Dataset (NBCD)
+from the Woods Hole Research Center (WHRC).  We use the National Land
+Cover Dataset (NLCD) of 2001 to assign each carbon density reading to
+a cover class.  The Protected Areas Database for the United States
+(PAD-US) is used to assign distinction within those land cover classes
+based on legal protection status.  This tabulation of the overall
+woody biomass inventory is summarized at three levels of
+disggregation: state, county, and 5 arc-minute ($5'$) grid cells.  The
+disaggregation by political unit is useful for policy analysis and the
+gridded representation is a key input for continental-scale land use
+conversion analyses that aim to capture the complete carbon cycle
+implications of converting forested land to biofuel crops, for
+example.
+#+END_abstract
 
-This won't work until another function call is included to run the R code.
+
+* Introduction
+
+*** Motivation
+
+**** TODO some prose about the biofuels program?
+
+To apply the information contained in the National Biomass and Carbon
+Dataset (NBCD) to an analysis of the land use change implications of
+expanding biofuels production it is necessary to add qualitative depth
+to the data.  There are components of the total above-ground live dry
+biomass (ALDB) that should be treated differently when modelling
+economic decisions about land use change and land management.  Rather
+than simply adding up the ALDB for each geographical unit in a given
+set of spatial boundaries that total biomass can be broken out into
+categories by overlaying information from other sources.  To add
+information about the physical characteristics of the biomass
+indicated at a given location and its cultural or ecological context
+we use the National Land Cover Database (NLCD).  Similarly to
+distignuish areas based on their legal protection status we bring in
+the Protected Areas Database of the United States (PAD-US). By
+assigning attributes from NLCD and PAD-US to the corresponding
+biomass inventory indicated by a given pixel in the NBCD data we are
+able to disaggregate the total biomass into categories given by the
+Cartesian product of the individual datasets' categories. More detail
+on this in section ______. 
+
+**** TODO cite NBCD, NLCD, PAD-US
+
+**** TODO cross-reference to section on data set details
+
+*** Analysis Framework
+
+A secondary goal of this work is to demonstrate a framework for
+reproducible research.  Unless you are browsing the source code
+repository of this project you are reading a document that is the
+result of an automated process that downloads the base data, performs
+some necessary transformations of those datasets, performs the
+computations from top to bottom, updates the figures, tables, and
+maps, and exports the complete document to a PDF file.  The particular
+framework chosen for this work uses the Emacs editor, Org-mode for
+outlining and literate programming, the Geospatial Data Abstraction
+Library (GDAL) for manipulation of vector and raster datasets, GRASS
+for analysis and tabulation of GIS data, and R for aggregation and
+formatting of the data. 
+
+**** TODO cite Emacs, Org-mode, R, GRASS, GDAL, raster
+
+
+*** Summary of Methodology
+
+The initial goal of this work was to assign protection status to areas
+of the various land cover classes.  Because PAD-US has coverage
+everywhere that NLCD does we extended the analysis to include Alaska,
+Hawaii, and Puerto Rico.  However, at present NBCD only provides data
+for the conterminous United States (cUSA) so the ultimate result of
+this process only covers that region.  The tabulation of protected
+areas by cover clasee for the outlying areas is provided for
+completeness leaving open the possibility that more data might become
+available in the future.
+
+To satisfy various modelling and reporting requirements we have
+adopted three modes of disaggregation of the woody biomass: state,
+county, and 5 arc-minute ($5'$) grid cells.  Clearly the first two
+are dependent and nested -- the total biomass in a state is the sum
+of the biomass of its counties.  Apart from the political boundaries
+it is common practice to subdivide the globe or regions thereof into
+units based on geographic coordinates, i.e. longitude and latitude.
+At $5'% (one twelfth of a degree) resolution a grid cell is roughly
+30km on a side at the equator.  The variation in area of these grid
+cells must be accounted for in any comparison among or summation
+across grid cells, but this complication is accepted as a trade-off
+against working in familiar map coordinates.
+
+In all cases we chose to reproject the units of disaggregation, being
+the states, counties, and grid cells, into the native representation
+of the input raster data (NBCD and NLCD), which happen to be in
+regional Albers equal-area projections chosen to minimize area
+distortions for their respective extents: cUSA, Alaska, Hawaii, and
+Purto Rico.  The political boundaries and protection status
+delineations are provided in vector format making them less
+computationally intensive to reproject than their raster counterparts.
+After reprojection we convert the political and protection status
+boundaries into their raster representation at the same resolution as
+the NBCD and NLCD data, thereby assigning additional qualitative
+categories to each NBCD/NLCD pixel.  From a programming perspective it
+was expedient to reproject the grid cells in raster space but they
+just as well could have been defined as vector entities as well.
+Therefore assigning NBCD pixels to their respective $5'$ grid cells
+was perhaps more expensinve in terms of processing time to perform but
+simpler from a conceptual and implementation perspective.  By bringing
+our reporting units into the coordinate space of the NBCD data we
+guarantee that the sum total of all given biomass will be conserved.
+
+
+**** DONE tangle out the R code and run it from the Makefile
+
+**** TODO Add an emacs-lisp function call to the makefile to evaluate the R code 
+
+This has to happen before tangling out the noweb components.
 
 
 * initialize the session
@@ -40,6 +161,9 @@ options( asciiType= "org")
 overwriteRasters <- TRUE
 
 #+END_SRC
+
+
+**** TODO include version and environment info from the various tools
 
 
 * COMMENT are these obsolete?
