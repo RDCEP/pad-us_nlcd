@@ -16,16 +16,26 @@ nlcd2001:
 	-wget -nc 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcd2001v2&FNAME=NLCD2001_landcover_v2_2-13-11.zip' -O NLCD2001_landcover_v2_2-13-11.zip
 	mkdir NLCD2001_landcover_v2_2-13-11
 	unzip -n -d NLCD2001_landcover_v2_2-13-11 NLCD2001_landcover_v2_2-13-11.zip
-	-wget -nc 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcdconus&FNAME=nlcd2001_canopy_mosaic_1-29-08.zip' -O nlcd2001_canopy_mosaic_1-29-08.zip
+
+nlcdMetadata:
 	-wget -nc 'http://www.mrlc.gov/nlcd01_leg.php'
 	-wget -nc 'http://www.mrlc.gov/includes/custom.css'
 
-nlcd01v1URL = 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcd2001v1&FNAME=nlcd2001_landcover_mosaic_2-20-07.zip'
 
-nlcd01v1:
-	-wget -nc $(nlcd01v1URL) -O nlcd2001_landcover_mosaic_2-20-07.zip
-	unzip nlcd2001_landcover_mosaic_2-20-07.zip -x 'nlcd2001_landcover_mosaic_2-20-07/nlcd_2001_landcover_metadata/*'
-	gdalinfo nlcd2001_landcover_mosaic_2-20-07/nlcd2001_mosaic_2-20-07.img > nlcd2001_landcover_mosaic_2-20-07/nlcd2001_mosaic_2-20-07.gdalinfo
+nlcd01v1: data/nlcd2001_landcover_mosaic_2-20-07.zip data/nlcd2001_canopy_mosaic_1-29-08.zip
+
+nlcd01v1CoverURL = 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcd2001v1&FNAME=nlcd2001_landcover_mosaic_2-20-07.zip'
+
+data/nlcd2001_landcover_mosaic_2-20-07.zip:
+	-wget --append-output=log/$(notdir $@).log --progress=dot:mega -nc $(nlcd01v1CoverURL) -O $@
+	unzip -o $@ -x 'nlcd2001_landcover_mosaic_2-20-07/nlcd_2001_landcover_metadata/*' -d data >> log/$(notdir $@).log
+	gdalinfo data/nlcd2001_landcover_mosaic_2-20-07/nlcd2001_mosaic_2-20-07.img > data/nlcd2001_landcover_mosaic_2-20-07/nlcd2001_mosaic_2-20-07.gdalinfo
+
+nlcd01v1CanopyURL = 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcdconus&FNAME=nlcd2001_canopy_mosaic_1-29-08.zip'
+
+data/nlcd2001_canopy_mosaic_1-29-08.zip:
+	-wget --append-output=log/$(notdir $@.log) --progress=dot:mega -nc $(nlcd01v1CanopyURL) -O $@
+	unzip -o $@ -x 'nlcd2001_canopy_mosaic_1-29-08/nlcd2001_canopy_metadata/*' -d data >> log/$(notdir $@).log
 
 ak:
 	-wget -nc 'http://gisdata.usgs.gov/TDDS/DownloadFile.php?TYPE=nlcdak&FNAME=AK_NLCD_2001_land_cover_3-13-08.zip' -O AK_NLCD_2001_land_cover_3-13-08.zip

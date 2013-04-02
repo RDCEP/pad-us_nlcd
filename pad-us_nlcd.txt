@@ -1,0 +1,1791 @@
+Synthesis of a disaggregated carbon inventory for the conterminous United States
+================================================================================
+
+Author: Neil Best, Joshua Elliott <nbest@ci.uchicago.edu, jelliott@ci.uchicago.edu>
+Date: 
+
+
+
+Table of Contents
+=================
+1 Introduction
+    1.1 [exact name of biofuels program]
+    1.2 Motivation
+    1.3 Analysis Framework
+    1.4 Summary of Methodology
+2 Underlying datasets
+    2.1 Describe NBCD ALDB and BAWH
+    2.2 cite NBCD web site and in-review paper
+    2.3 NLCD land use/land cover and canopy density
+    2.4 Dependency of NBCD on NLCD
+3 Analysis Procedure
+    3.1 Reproject the $5'$ grid cells
+    3.2 Download and prepare inputs
+    3.3 Load the data into GRASS
+    3.4 Replace null values in NBCD with zeroes
+    3.5 Aggregate the statistics
+4 Plots
+5 Appendix
+    5.1 Software Environment
+
+
+1 Introduction 
+===============
+
+1.1 TODO [exact name of biofuels program] 
+------------------------------------------
+
+some prose about the biofuels program?
+
+
+1.2 Motivation 
+---------------
+
+To apply the information contained in the National Biomass and Carbon
+Dataset (NBCD) to an analysis of the land use change implications of
+expanding biofuels production it is necessary to add qualitative depth
+to the data.  There are components of the total above-ground live dry
+biomass (ALDB) that should be treated differently when modelling
+economic decisions about land use change and land management.  Rather
+than simply adding up the ALDB for each geographical unit in a given
+set of spatial boundaries that total biomass can be broken out into
+categories by overlaying information from other sources.  To add
+information about the physical characteristics of the biomass
+indicated at a given location and its cultural or ecological context
+we use the National Land Cover Database (NLCD).  Similarly to
+distignuish areas based on their legal protection status we bring in
+the Protected Areas Database of the United States (PAD-US). By
+assigning attributes from NLCD and PAD-US to the corresponding biomass
+inventory indicated by a given pixel in the NBCD data we are able to
+disaggregate the total biomass into categories given by the Cartesian
+product of the individual datasets' categories. More detail on this in
+section ______.
+
+
+* TODO cite NBCD, NLCD, PAD-US 
+* TODO cross-reference to section on data set details 
+  
+
+1.3 Analysis Framework 
+-----------------------
+
+A secondary goal of this work is to demonstrate a framework for
+reproducible research.  Unless you are browsing the source code
+repository of this project you are reading a document that is the
+result of an automated process that downloads the base data, performs
+some necessary transformations of those datasets, performs the
+computations from top to bottom, updates the figures, tables, and
+maps, and exports the complete document to a PDF file.  The particular
+framework chosen for this work uses the Emacs editor, Org-mode for
+outlining and literate programming, the Geospatial Data Abstraction
+Library (GDAL) for manipulation of vector and raster datasets, GRASS
+for analysis and tabulation of GIS data, and R for aggregation and
+formatting of the data. 
+
+* TODO cite Emacs, Org-mode, R, GRASS, GDAL, raster, data.table 
+  
+  Full software version information is available in the appendix.
+  
+  
+  
+  
+    ## library( raster)
+    library( raster, lib.loc="~/src/R/lib/")
+    setOptions( progress= "text")
+    library( plyr)
+    library( stringr)
+    library( ascii)
+    options( asciiType= "org")
+    library( reshape)
+    library( Hmisc)
+    library( data.table)
+    
+    ## overwriteRasters <- TRUE
+  
+  
+  
+
+1.4 Summary of Methodology 
+---------------------------
+
+The initial goal of this work was to assign protection status to areas
+of the various land cover classes.  Because PAD-US has coverage
+everywhere that NLCD does we extended the analysis to include Alaska,
+Hawaii, and Puerto Rico.  However, at present NBCD only provides data
+for the conterminous United States (cUSA) so the ultimate result of
+this process only covers that region.  The tabulation of protected
+areas by cover clasee for the outlying areas is provided for
+completeness leaving open the possibility that more data might become
+available in the future.
+
+To satisfy various modelling and reporting requirements we have
+adopted three modes of disaggregation of the woody biomass: state,
+county, and 5 arc-minute ($5'$, one twelfth of a degree) grid cells.
+Clearly the first two are dependent and nested -- the total biomass in
+a state is the sum of the biomass of its counties.  Apart from the
+political boundaries it is common practice to subdivide the globe or
+regions thereof into units based on geographic coordinates,
+i.e. longitude and latitude.  At $5'$ resolution a grid cell is
+roughly 10 km on a side at the equator.  The variation in area of
+these grid cells must be accounted for in any comparison among or
+summation across grid cells, but this complication is accepted as a
+trade-off against working in familiar map coordinates.
+
+In all cases we chose to reproject the units of disaggregation, being
+the states, counties, and grid cells, into the native representation
+of the input raster data (NBCD and NLCD), which happen to be in
+regional Albers equal-area projections chosen to minimize area
+distortions for their respective extents: cUSA, Alaska, Hawaii, and
+Purto Rico.  The political boundaries and protection status
+delineations are provided in vector format making them less
+computationally intensive to reproject than their raster counterparts.
+After reprojection we convert the political and protection status
+boundaries into their raster representation at the same resolution as
+the NBCD and NLCD data, thereby assigning additional qualitative
+categories to each NBCD/NLCD pixel.  From a programming perspective it
+was expedient to reproject the grid cells in raster space but they
+just as well could have been defined as vector entities as well.
+Therefore assigning NBCD pixels to their respective $5'$ grid cells
+was perhaps more expensinve in terms of processing time to perform but
+simpler from a conceptual and implementation perspective.  By bringing
+our reporting units into the coordinate space of the NBCD data we
+guarantee that the sum total of all given biomass will be conserved.
+
+
+* DONE tangle out the R code and run it from the Makefile 
+  
+* TODO Add an emacs-lisp function call to the makefile to evaluate the R code 
+  
+  This has to happen before tangling out the noweb components.  However,
+  it is possible that the need for this has gone away with new versions
+  of Org since this project began.
+  
+  
+
+2 Underlying datasets 
+======================
+
+This section describes the input datasets that go into this analysis
+in greater detail than what was offerd in the introduction.
+Conceptually the analysis employs land use / land cover information
+from NLCD, legal protection status from PAD-US, and political
+boundaries from the US Census to disaggregate undifferentiated
+estimates of woody biomass, i.e. ALDB, which is assumed to be 50%
+carbon by mass, taken from NBCD.  The analysis also employs another
+spatial divisions of disaggregation, the $5'$ grid cells, which are
+also defined here for completeness.
+
+2.1 TODO Describe NBCD ALDB and BAWH 
+-------------------------------------
+
+2.2 TODO cite NBCD web site and in-review paper 
+------------------------------------------------
+
+Kellndorfer, J., Walker, W., LaPoint, E., Bishop, J., Cormier, T.,
+Fiske, G., Hoppus, M., Kirsch, K., and Westfall, J. 2012. NACP
+Aboveground Biomass and Carbon Baseline Data (NBCD 2000),
+U.S.A., 2000. Data set. Available on-line [http://daac.ornl.gov] from
+ORNL DAAC, Oak Ridge, Tennessee,
+U.S.A. [http://dx.doi.org/10.3334/ORNLDAAC/1081] or at
+[http://www.whrc.org/mapping/nbcd/]
+
+Kellndorfer, J.M., Walker, W.S., Kirsch, K.M., Fiske, G., Bishop, J.,
+LaPoint, E., Hoppus, M, & Westfall, J. The National Biomass and Carbon
+data set 2000 (NBCD 2000): A high resolution baseline for the
+conterminous U.S. Remote Sensing of Environment, Submitted.
+
+
+2.3 NLCD land use/land cover and canopy density 
+------------------------------------------------
+
+
+* TODO Describe NLCD land use/land cover and canopy density 
+  
+  
+
+2.4 Dependency of NBCD on NLCD 
+-------------------------------
+
+One important factor that influenced our operational choices in
+carrying out the analysis is the dependence between NLCD and NBCD.
+NBCD's ALDB densities are only calculated where NLCD's canopy density
+is non-zero and WHRC's radar-derived basal area weighted height
+(BAWH) is also non-zero.  Because NBCD is modelled based on the first
+version of the 2001 NLCD and that is the only version for which
+canopy density is provided it is meaningless to disaggregate ALDB
+based on subsequent versions of NLCD.  The classification accuracy of
+NLCD 2001 version 1 is described in _____.  
+
+* TODO cite carbon mass fraction of ALDB from WHRC 
+  
+* TODO cite NLCD 2001 v1 accuracy assessment 
+  
+* TODO explain which NLCD classes are modelled for ALDB 
+  
+  
+
+3 Analysis Procedure 
+=====================
+
+Conceptually our method reduces to a brute-force tabulation exercise.
+We are simply constructing classifications of the following forms:
+
+- grid ID, land use/cover, protection status
+- state, county, land use/cover, protection status
+
+By tabulating NBCD pixels on these bases we are able sum up the ALDB
+densities for a given set of identifiers in the above schema.  For
+this method to work it is necessary to convert all of the variables
+into rasters of the same projection, extent, and resolution so that
+there is a one-to-one relationship between pixels among the variables.
+For this analysis we have chosen to work in the Albers equal-area
+projection used by NBCD and NLCD to avoid performing any
+transformation on them.  PAD-US and the political boundaries are
+provided in vector form so they are reprojected and converted to
+rasters.  Similarly the $5'$ grid cells that are regular in
+geographic coordinates are reprojected into irregular areas in the
+target projection so that each NBCD/NLCD pixel is assigned a grid
+cell ID.
+
+
+3.1 Reproject the $5'$ grid cells 
+----------------------------------
+
+For convenience we adopt a scheme for identifying the $5'$ grid cells
+using sequential integers rather than decimal coordinates.  By
+stipulating that any grid we wish to consider in our models is either
+a global grid or a subset thereof the only parameter that must be
+tracked is the resolution.  Cell number one has its upper left corner
+at 180 degrees west longitude and 90 degrees north latitude (-180,90)
+by convention.  From there the cell numbers increase to the east and
+then resume at the western edge when eastern edge is reached.  =R='s
+=raster= package provides a convenient abstraction for specifying and
+instantiating such simply formulated rasters.  The following code
+performs these steps:
+
+1. Create a global raster in geogrpahic coordinates by default.
+2. Set the resolution to $5'$.
+3. Assign values to its cells from a sequence that runs from one to
+   the number of cells.
+4. Write the data to a file.
+
+
+
+  world <- raster()
+  res( world) <- 5/60
+  world[ ] <-
+    1:ncell( world)
+  world <-
+    writeRaster(
+      world, "data/grid5minWorld.tif",
+      datatype= "INT4U",
+      overwrite= overwriteRasters)
+
+
+The cUSA study area covers only a subset of these cells.  Using the
+=gdalwarp= utility from GDAL we can specify a target projection,
+extent, and resolution that match NBCD/NLCD.
+
+
+
+  cusaProj='+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 cusaProj'
+  cusaProj+='+lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'
+  
+  gdalwarp -overwrite -of HFA \
+      -t_srs ${cusaProj} \
+      -te -2493045 177285 2342655 3310005 \
+      -tr 30 30 -co "COMPRESSED=YES" \
+      data/grid5minWorld.tif data/grid5minAeaCUSA.img
+
+
+
+3.2 Download and prepare inputs 
+--------------------------------
+
+3.2.1 NLCD 
+~~~~~~~~~~~
+
+The first version of the 2001 NLCD is available as a single raster
+file so no special preparation is required.
+
+
+3.2.2 NBCD 
+~~~~~~~~~~~
+
+The second version of the NBCD is divided according to "mapping zones"
+and so must be patched together to form a continuous coverage.  We do
+this using GDAL's =gdalbuildvrt= to build a virtual raster from the
+collection of downloaded mapping zone tiles.  The caveat which comes
+with this approach is that the individual NBCD rasters include a small
+buffer outside the boundary of the respective mapping zone which means
+that there will be one or more NBCD rasters that contain estimates for
+pixels on either side of the mapping zone boundaries.  Because the
+model that produces the NBCD estimates has a stochastic component
+estimates for a given pixel within these overlapping buffer zones are
+not constrained to have the same value.  From [the `gdalbuildvrt' page on gdal.org]:
+
+ORG-BLOCKQUOTE-START
+If there is some amount of spatial overlapping between files, the
+order may depend on the order they are inserted in the VRT file, but
+this behaviour should not be relied on.
+ORG-BLOCKQUOTE-END
+
+The best action we could take to maintain reproducibility in this
+situation is to ensure that the arguments to the =gdalbuildvrt=
+utility, the names of the NBCD tiles, are given to in lexicographic
+order.
+
+
+[the `gdalbuildvrt' page on gdal.org]: http://gdal.org/gdalbuildvrt.html
+
+* TODO either copy or include code from NBCD submodule 
+  
+  
+
+3.2.3 PAD-US 
+~~~~~~~~~~~~~
+
+
+3.2.4 State and county boundaries 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+3.3 Load the data into GRASS 
+-----------------------------
+
+Due to the volume of data involved in computations at continental
+extents and 30m resolution processing performance becomes a critical
+factor.  At the time of this writing the performance of =GRASS='s
+=r.stats= utility far outstrips that of Hijman & van Etten's =raster=
+package for =R= in computing pixel count tabulations.  Therefore it is
+worth the trouble to populate as =GRASS= database and convolve our
+input data sets there.
+
+* TODO check if =raster= has improved tabulation performance. 
+  
+  
+
+3.3.1 start GRASS 
+~~~~~~~~~~~~~~~~~~
+
+
+
+  cd ~/Desktop/pad-us_nlcd
+  export GISRC=./.grassrc6
+  grass64 -text data/grass/cUSA/PERMANENT
+
+
+* TODO check that GRASS processing works out of the box 
+  
+  Make sure that the bare GRASS database in the Git repo is enough to
+  start the project cleanly.
+  
+  
+
+3.3.2 Load the NBCD data 
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+  # g.gisenv set=LOCATION_NAME=cUSA
+  # g.gisenv set=MAPSET=PERMANENT
+  eval $(g.gisenv)
+  
+  # export GRASS_MESSAGE_FORMAT=plain 
+  r.in.gdal --overwrite -e \
+    input=nbcd/data/nbcdAldb.vrt output=nbcdAldb
+  r.in.gdal --overwrite -e \
+    input=nbcd/data/nbcdBawh.vrt output=nbcdBawh
+
+
+
+3.3.3 load the $5'$ grid cell IDs 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+  r.in.gdal in=data/grid5minAeaCUSA.vrt out=grid_5min
+
+
+
+3.3.4 laod the PAD-US data 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+  r.in.gdal input=pad-us/data/PADUS1_2_cUSA_GAP.tif output=gap
+
+
+
+3.3.5 Load the NLCD data 
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+  r.in.gdal input=nlcd/pr_landcover_wimperv_10-28-08_se5.img output=Nlcd01v1PR
+  r.in.gdal --overwrite -e \
+    input=nlcd/data/nlcd2001_canopy_mosaic_1-29-08/nlcd_canopy_mosaic_1-29-08.img \
+    output=canopy
+
+
+
+3.3.6 Load the state and county rasters 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+  r.in.gdal --overwrite -e \
+    input=data/cusaStatesAea.img output=states
+  r.in.gdal --overwrite -e \
+    input=data/cusaCountiesAea.img output=counties
+
+
+
+3.4 Replace null values in NBCD with zeroes 
+--------------------------------------------
+
+
+
+  g.region rast=Nlcd01v1
+  r.mask -o input=Nlcd01v1 maskcats="1 thru 95"
+  
+  r.mapcalc nbcdMask='eval( nbcd=canopy > 0 && nbcdBawh > 0, if( isnull( nbcd), 0, nbcd))'
+  
+  # echo grid_5min,Nlcd01v1,gap,aldb,n > data/statsNbcdNlcd01v1Grid5min.csv && \
+  # r.stats -Nc input=grid_5min,Nlcd01v1,gap,nbcdAldb fs=, >> data/statsNbcdNlcd01v1Grid5min.csv 2> data/statsNbcdNlcd01v1Grid5min.err &
+  
+  echo state,county,Nlcd01v1,gap,nbcd,aldb,n > data/statsNbcdNlcd01v1County.csv \
+      && r.stats -Nc input=states,counties,Nlcd01v1,gap,nbcdMask,nbcdAldb fs=, \
+      >> data/statsNbcdNlcd01v1County.csv \
+      2> data/statsNbcdNlcd01v1County.err &
+
+
+
+3.5 Aggregate the statistics 
+-----------------------------
+
+
+3.5.1 by 5' grid cells 
+~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+  stats <-
+    read.csv( "statsNbcd.csv",
+             na.strings= "*",
+             col.names= c( "cell", "nlcd", "gap", "nbcd", "n"),
+             colClasses= c("numeric", "factor", "factor", "numeric"))
+  
+  stats <-
+    within(
+      stats,
+      { levels( gap) <- c( levels( gap), "0")
+        gap[ is.na( gap)] <- "0"
+        gap <- combine_factor( gap, c(0,1,1,1,0))
+        levels( gap) <- c( "no", "yes")
+        nbcd[ is.na( nbcd)] <- 0
+      })
+  
+  dt <- data.table( stats)
+  setkey( dt, cell, nlcd, gap)
+  
+  wm <- dt[, list( wm= weighted.mean( nbcd, n)), by= "cell,nlcd,gap"]
+  
+  wmCt <-
+    cast(
+      data= wm,
+      formula= cell ~ gap + nlcd,
+      ## fun.aggregate= sum,
+      ## margins= "grand_col",
+      value= "wm" )
+  
+  write.csv(
+    format.df(
+      wmCt,
+      cdec= c( 0, rep( 1, ncol( wmCt) - 1)),
+      numeric.dollar= FALSE,
+      na.blank= TRUE),
+    row.names= FALSE,
+    file= "nbcdFiaAldb.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd_nbcd.zip", "fracscUSA.csv")
+  zip( "pad-us_nlcd_nbcd.zip", "nbcdFiaAldb.csv")
+
+  
+
+  + TODO convert NAs to zeros for \*Fr and \*Ha in CSVs and SHPs 
+  + TODO trim spaces in char data frames before writing CSVs 
+    
+    
+
+3.5.2 load r.stats output 
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+  library( reshape)
+  library( Hmisc)
+  library( data.table)
+  library( stringr)
+  library( ggplot2)
+  library( foreign)
+  
+  stateAttrs <-
+    read.dbf( "shp/tl_2010_us_state10.dbf")
+  stateNames <-
+    data.table( stateAttrs[, c( "STATEFP10", "STUSPS10", "NAME10")])
+  setnames(
+    stateNames,
+    names( stateNames),
+    c( "state", "usps", "name"))
+  setkey( stateNames, state)
+  
+  keycols <- c(
+    "state", "county", "nlcd", 
+    "gap",  "nbcd", "aldb")
+  
+  rawCountyStats <-
+    read.csv(
+      "data/statsNbcdNlcd01v1County.csv",
+      na.strings= "*",
+      header= TRUE,
+      col.names= c( keycols, "n"),
+      colClasses= c(
+        "character", "character", "character",
+        "integer", "integer", "integer", "integer"))
+  
+  rawCountyStats <- data.table( rawCountyStats)
+  setkeyv( rawCountyStats, keycols)
+  
+  {
+    rawCountyStats[ is.na(  state),  state := "0"]
+    rawCountyStats[ is.na( county), county := "0"]
+    rawCountyStats[,  state :=
+                   str_pad(
+                     as.character(  state),
+                     2, pad= "0")]
+    rawCountyStats[, county :=
+                   str_pad(
+                     as.character( county),
+                     3, pad= "0")]
+    rawCountyStats[ is.na( gap), gap := 0L]
+    rawCountyStats[ gap == 4L, gap := 0L]
+    rawCountyStats[ gap != 0L, gap := 1L]
+    rawCountyStats[ is.na( aldb), aldb := 0L]
+    rawCountyStats[, gap := as.logical( gap)]
+    rawCountyStats[, nbcd := as.logical( nbcd)]
+    rawCountyStats[ !nbcd, aldb := NA]
+  }
+  
+  setkeyv( rawCountyStats, keycols)
+
+
+3.5.3 collapse the records for GAP values that are no longer differentiated 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+
+  rawCountyStats <-
+    rawCountyStats[, list( n= sum( n)),
+                   keyby= keycols ]
+  
+  rawStateStats <- 
+    rawCountyStats[, list( n= sum( n)),
+                   keyby= keycols[ -2] ]
+  
+  
+  ## same thing in functional form
+  
+  ## rawStateStats <- `[`(
+  ##   x= rawCountyStats,
+  ##   j= list( n= sum( n)),
+  ##   keyby= keycols[ -2])
+
+
+Show the low-density forests that we intend to backfill.
+
+
+
+
+  qplot(
+    data= rawCountyStats[ nlcd %in% as.character( c(41:43, 90))],
+    x= aldb,
+    weight= n,
+    binwidth= 5,
+    xlim= c( 0, 200),
+    geom= "histogram", 
+    group= gap,
+    fill= gap,
+    position= "dodge",
+    ## position= "stack",
+    facets= nlcd ~ .)
+
+
+[file:pad-us_nlcd/images/forestHist.png]
+
+
+
+
+  qplot(
+    data= rawCountyStats[ nlcd %in% as.character( c(41:43, 90))],
+    x= aldb,
+    weight= n,
+    binwidth= 1,
+    xlim= c( 0, 20),
+    geom= "histogram", 
+    group= gap,
+    fill= gap,
+    position= "dodge",
+    ## position= "stack",
+    facets= nlcd ~ .)
+
+
+[file:pad-us_nlcd/images/forestHistDetail.png]
+
+
+
+3.5.4 repeat for states 
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* calculate the average densities for original and modified pixel counts 
+  
+  + TODO Figure out how to do self-join in functional form 
+    
+    
+    
+    statsNbcdState <- `[`(
+      x= rawStateStats,
+      j= list(
+        aldb= weighted.mean( aldb, n),
+        n= sum( n),
+        ha= sum(n) * 30^2 / 10^4),
+      keyby= "state,nlcd,gap,nbcd")
+    
+    stateAreas <- `[`(
+      x= statsNbcdState ,
+      j= list( totHa= sum(ha)),
+      keyby= "state")
+    
+    statsNbcdState <-
+      statsNbcdState[ stateAreas][, frac:= ha / totHa][, totHa := NULL]
+    
+    
+    ## statsNbcdState <- `[`(
+    ##   x= `[`(
+    ##     x= statsNbcdState,
+    ##     j= list( stateAreas)) ,
+    ##   j= frac:= ha / totHa)
+    
+    ## `[`( x= statsNbcdState, j= stateAreas)
+    
+    ## `[`( x= statsNbcdState,
+    ##     j= list(
+    ##       names( statsNbcdState),
+    ##       frac= ha / sum( .SD[, ha])),
+    ##     keyby= "state")
+    
+    
+    
+    To backfill those NLCD/GAP combinations we must calculate national averages.
+    
+    
+    
+    nbcdMean <-
+      statsNbcdState[ n != n2][, list(
+                        aldb= weighted.mean( aldb2, n, na.rm= TRUE)),
+                        keyby= "nlcd,gap"]
+    
+    ascii(
+      cast(
+        nbcdMean,
+        nlcd ~ gap,
+        value= "aldb"),
+      digits = 1,
+      include.rownames= FALSE)
+    
+    
+    nlcd   FALSE    TRUE  
+     ------+-------+-------
+      41   111.4   119.5  
+      42   103.7   120.5  
+      43   110.2   134.0  
+      90    96.4    91.1  
+    
+    
+    
+    
+    
+    
+* calculate the grand total 
+  
+  
+  
+  statsNbcdState[ I( nbcd), list( Gt= sum( aldb * ha) / 10^9)]
+  
+  
+  
+* write out the state data in long form 
+  
+  
+  
+  write.csv(
+    statsNbcdState[, list( state,nlcd,gap,nbcd,aldb,n,ha,frac)],
+    row.names= FALSE,
+    file= "pad-us_nlcd/nbcdStateSerial.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdStateSerial.csv")
+  
+  
+  
+  
+* cross-tabulate the state data using backfilled densities 
+  
+  
+  
+  
+  nbcdStateAldb <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= nbcd,
+        formula= state ~ gap + nlcd,
+        value= "aldb"),
+      key= "state")
+  
+  setnames(
+    nbcdStateAldb,
+    colnames( nbcdStateAldb),
+    str_replace(
+      str_replace(
+        colnames(nbcdStateAldb),
+        "TRUE_", "yes"),
+      "FALSE_", "no"))
+  
+  
+  nbcdStateAldbMeans <- 
+    data.table(
+      cast(
+        data=
+        statsNbcdState[
+          I( nbcd),
+          list( aldbAve= weighted.mean( aldb, ha)),
+          by= c( "state", "gap")],
+        formula= state ~ gap,
+        value= "aldbAve"),
+      key= "state")
+  
+  setnames(
+    nbcdStateAldbMeans,
+    c( "FALSE", "TRUE"),
+    c( "noAll", "yesAll"))
+  
+  nbcdStateGapFrac <-
+    data.table(
+      cast(
+        data= statsNbcdState,
+        formula= state ~ gap,
+        value= "frac",
+        fun.aggregate= sum,
+        na.rm = TRUE),
+      key= "state")
+  
+  setnames(
+    nbcdStateGapFrac,
+    c( "FALSE", "TRUE"),
+    c( "noAllFr", "yesAllFr"))
+  
+  nbcdStateGapHa <-
+    data.table(
+      cast(
+        data= statsNbcdState,
+        formula= state ~ gap,
+        value= "ha",
+        fun.aggregate= sum,
+        na.rm= TRUE),
+      key= "state")
+  
+  setnames(
+    nbcdStateGapHa,
+    c( "FALSE", "TRUE"),
+    c( "noAllHa", "yesAllHa"))
+  
+  nbcdStateGapHa <-
+    data.table(
+      cast(
+        data= statsNbcdState[, list( ha=sum( ha)),
+          keyby= "state,gap,nbcd"],
+        formula= state ~ gap + nbcd,
+        value= "ha"),
+      key= "state")
+  
+  setnames(
+    nbcdStateGapHa,
+    c( "FALSE_FALSE", "FALSE_TRUE", "TRUE_FALSE", "TRUE_TRUE"),
+    c( "noAllHaN", "noAllHa", "yesAllHaN", "yesAllHa"))
+  
+  nbcdStateFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= nbcd,
+        formula= state ~ gap + nlcd,
+        value= "frac"),
+      key= "state")
+  
+  setnames(
+    nbcdStateFrac,
+    colnames( nbcdStateFrac)[ -1],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdStateFrac)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Fr", sep= ""))
+  
+  nbcdNullStateFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= !nbcd,
+        formula= state ~ gap + nlcd,
+        value= "frac"),
+      key= "state")
+  
+  setnames(
+    nbcdNullStateFrac,
+    colnames( nbcdNullStateFrac)[ -1],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdNullStateFrac)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "FrN", sep= ""))
+  
+  nbcdStateHa <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= nbcd,
+        formula= state ~ gap + nlcd,
+        value= "ha"),
+      key= "state")
+  
+  setnames(
+    nbcdStateHa,
+    colnames( nbcdStateHa)[ -1],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdStateHa)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Ha", sep= ""))
+  
+  nbcdNullStateHa <- 
+    data.table(
+      cast(
+        data= statsNbcdState,
+        subset= !nbcd,
+        formula= state ~ gap + nlcd,
+        value= "ha"),
+      key= "state")
+  
+  setnames(
+    nbcdNullStateHa,
+    colnames( nbcdNullStateHa)[ -1],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdNullStateHa)[ -1],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "HaN", sep= ""))
+  
+  nbcdState <-
+    nbcdStateAldb[ nbcdStateAldbMeans]
+  nbcdState <-
+    nbcdState[ nbcdStateGapFrac][ nbcdStateGapHa]
+  nbcdState <-
+    nbcdState[ nbcdStateFrac][ nbcdStateHa]
+  nbcdState <-
+    nbcdState[ nbcdNullStateFrac][ nbcdNullStateHa]
+  
+  setnames(
+    nbcdState,
+    "state", "fips")
+  
+  setcolorder(
+    nbcdState,
+    order( colnames( nbcdState)))
+  
+  nbcdStateChar <-
+    str_trim(
+      format.df(
+        nbcdState,
+        cdec= sapply(
+          colnames( nbcdState),
+          function( x) {
+            ifelse(
+              x == "fips", 0,
+              ifelse(
+                str_detect( x, "HaN?$"), 1,
+                ifelse(
+                  str_detect( x, "FrN?$"), 3,
+                  1)))
+          }),
+        numeric.dollar= FALSE,
+        na.blank= TRUE))
+  
+  write.csv(
+    nbcdStateChar,
+    row.names= FALSE,
+    file= "pad-us_nlcd/nbcdState.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdState.csv")
+  
+  options(useFancyQuotes = FALSE)
+  cat(
+    sapply(
+      colnames( nbcdState),
+      function( x) {
+        dQuote(
+          ifelse(
+            x == "fips", "String(2)",
+            ifelse(
+              str_detect( x, "HaN?$"),
+              "Real(10.1)",
+              ifelse(
+                str_detect( x, "FrN?$"),
+                "Real(5.3)",
+                "Real(5.1)"))))
+      }),
+    sep= ",",
+    file= "pad-us_nlcd/nbcdState.csvt")
+  options(useFancyQuotes = TRUE)
+  
+  ogr2ogr <-
+    paste(
+      "ogr2ogr -overwrite -progress -sql",
+      sprintf(
+        "\"select %s from cusaStatesAea a",
+        paste( colnames( nbcdState), collapse= ",")),
+      "left join 'pad-us_nlcd/nbcdState.csv'.nbcdState b",
+      "on a.GEOID10 = b.fips\"",
+      "pad-us_nlcd/nbcdState.shp shp/cusaStatesAea.shp")
+  
+  system( ogr2ogr)
+  
+  zip(
+    "pad-us_nlcd.zip",
+    list.files(
+      path= "pad-us_nlcd",
+      pattern= "^nbcdState\\.[a-z]{3}",
+      full.names= TRUE))
+  
+  
+  
+  
+  
+
+3.5.5 repeat for counties 
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+  ## library( reshape)
+  ## library( Hmisc)
+  ## library( data.table)
+  ## library( stringr)
+  
+  statsNbcdCounty <-
+    rawCountyStats[, list(
+      aldb= weighted.mean( aldb, n),
+      n= sum( n),
+      ha= sum(n) * 30^2 / 10^4),
+                   keyby= "state,county,nlcd,gap,nbcd"]
+  countyAreas <-
+    statsNbcdCounty[, list( totHa= sum(ha)),
+                    keyby= c( "state", "county")]
+  statsNbcdCounty <-
+    statsNbcdCounty[ countyAreas][, frac:=ha/totHa]
+  
+  ## statsNbcdCounty <-
+  ##   merge(
+  ##     statsNbcdCounty,
+  ##     statsNbcdState[, list( state, nlcd, gap, aldb2, n2)],
+  ##     by= c( "state", "nlcd", "gap"),
+  ##     all.x= TRUE)
+  
+  ## statsNbcdCounty[, fill := as.character(NA)]
+  
+  ## statsNbcdCounty[ n2.x == 0 & n2.y == 0, fill := "cUSA"]
+  ## statsNbcdCounty[ n2.x == 0 & n2.y != 0, fill := "state"]
+  
+  ## statsNbcdCounty[ is.na( aldb2.x), aldb2.x := aldb2.y]
+  ## statsNbcdCounty[, aldb2.y := NULL]
+  ## statsNbcdCounty[,    n2.y := NULL]
+  ## statsNbcdCounty[,   totHa := NULL]
+  
+  ## setkey( statsNbcdCounty, state, county, nlcd, gap)
+  ## setnames(
+  ##   statsNbcdCounty,
+  ##   c( "aldb2.x", "n2.x"),
+  ##   c( "aldb2",   "n2"))
+  
+  ## setcolorder(
+  ##   statsNbcdCounty,
+  ##   c( "state", "county", "nlcd", "gap",
+  ##     "aldb", "aldb2", "n", "n2", "ha", "ha2",
+  ##     "frac", "fill"))
+  
+  ## test
+  ## any( abs( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1) > 0.001)
+
+
+* check for cases where NBCD makes no prediction 
+  
+  NBCD only predicts biomass density where it has sufficient canopy
+  density and basal area-weighted height to do so.  We can presume that
+  the ALDB density for a given state/county//nlcd/gap combination outside of the
+  NBCD prediction is something less than its modeled counterpart.  Any
+  heuristic that attempts to plug in a density value not predicted by
+  NBCD will fail when the NBCD prediction area was zero for a given
+  state/nlcd/gap combination.
+  
+  
+  
+    countyAreaCheck <- 
+      data.table( cast(
+        statsNbcdCounty,
+        state + county + nlcd + gap ~ nbcd,
+        value= "n"))
+    
+    countyAreaCheck <-
+      countyAreaCheck[ `FALSE` > 0 & `TRUE` == 0]
+    setkey( countyAreaCheck, state, county, nlcd, gap)
+    
+    
+    statsNbcdCountyTrue <- statsNbcdCounty[ I( nbcd)][, nbcd := NULL]
+    setkey( statsNbcdCountyTrue, state, county, nlcd, gap)
+    
+    statsNbcdCountyFalse <- statsNbcdCounty[ !nbcd][, nbcd := NULL]
+    setkey( statsNbcdCountyFalse, state, county, nlcd, gap)
+    
+    statsNbcdCountyTrue[ statsNbcdCountyFalse][ is.na( aldb)]
+    
+    cast(
+      data.frame(
+        statsNbcdCounty[ !nbcd]),
+        ## statsNbcdCountyTrue[ statsNbcdCountyFalse][ is.na( aldb)]),
+      nlcd ~ gap,
+      value= "ha",
+      fun= sum,
+      margins= TRUE)
+    
+    
+    aldbIgnoringGap <-
+      statsNbcdCounty[ I( nbcd),
+                      list(
+                        aldb= weighted.mean(
+                          aldb, n, na.rm= TRUE)),
+                      keyby= "state,county,nlcd"]
+    
+    
+    cast(
+      data.frame(
+        ),
+      nlcd ~ gap,
+      value= "ha.1",
+      fun= sum,
+      margins= TRUE)
+    
+    
+    cast(
+      data.frame(
+        statsNbcdCounty),
+      nlcd ~ gap,
+      value= "ha",
+      fun= sum,
+      margins= TRUE)
+    
+    
+    statsNbcdCounty[ !nbcd, ha,
+      keyby= "state,county,nlcd,gap"][
+        statsNbcdCounty[, ha,
+          keyby= "state,county,nlcd,gap"],
+        nomatch=0][,
+          list( haFalse= sum( ha),
+               haTotal= sum( ha.1)), by="nlcd,gap"]
+    
+    notModeledByNbcd <- 
+      statsNbcdCounty[ !nbcd, ha, keyby= "state,county,nlcd,gap"][
+        statsNbcdCounty[ , list( totHa= sum(ha)), keyby= "state,county,nlcd,gap"], nomatch=0][,
+          list( ha= sum(ha), totHa= sum( totHa)), keyby= "nlcd,gap"]
+    
+    
+    notModeledPcts <- 
+      data.frame(
+        notModeledByNbcd[,
+          pct := ha / totHa * 100])
+    
+    within( notModeledPcts, {
+      nlcd <- factor(nlcd, levels= names( nlcdCovers), labels= nlcdCovers)
+    }
+    
+    ascii(
+      cast(
+        within(
+          notModeledPcts,
+          nlcd <- factor(
+            nlcd,
+            levels= names( nlcdCovers),
+            labels= nlcdCovers)),
+        nlcd ~ gap, value= "pct"),
+      digits=3,
+      include.rownames= FALSE,
+      colnames= c( "NLCD", "unprotected", "protected"),
+      align= c( "l", "r", "r"))
+  
+  
+  
+* TODO Make a table of these results 
+  
+  
+  
+    state   FALSE   TRUE   (all)  
+   -------+-------+------+-------
+       00       0      0       0  
+       01     829     49     878  
+       04      29    268     297  
+       05     592    156     749  
+       06     823   1287    2111  
+       08     152    534     687  
+       09     123     21     144  
+       10      17      5      22  
+       11       1      0       1  
+       12     430    179     609  
+       13     857     97     954  
+       16     128    666     795  
+       17     221     32     254  
+       18     258     31     289  
+       19     105      6     112  
+       20      70      3      72  
+       21     618     64     682  
+       22     504     68     572  
+       23     629    141     770  
+       24     132     31     163  
+       25     162     62     224  
+       26     521    252     773  
+       27     260    254     514  
+       28     659     69     728  
+       29     534     93     627  
+       30     186    672     858  
+       31      37      4      41  
+       32      14    126     141  
+       33     205     95     300  
+       34      97     55     152  
+       35      95    233     327  
+       36     860    297    1157  
+       37     812    154     965  
+       38      20      7      27  
+       39     444     47     492  
+       40     285     33     318  
+       41     606   1229    1835  
+       42     828    270    1098  
+       44      18      6      24  
+       45     447     56     503  
+       46      24     30      54  
+       47     629    102     730  
+       48     653     66     719  
+       49      68    242     310  
+       50     219     60     279  
+       51     765    155     920  
+       53     582   1007    1589  
+       54     666    110     776  
+       55     471     95     566  
+       56      48    287     335  
+    (all)   17736   9807   27543  
+  
+  
+* calculate the grand total 
+  
+  
+  
+  statsNbcdCounty[ I( nbcd), list( Gt= sum( aldb * ha) / 10^9)]
+  
+  
+  
+* write out the results in long form 
+  
+  
+  
+  write.csv(
+    statsNbcdCounty[, list( state, county, nlcd, gap, nbcd, aldb, ha, frac)],
+    row.names= FALSE,
+    file= "pad-us_nlcd/nbcdCountySerial.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCountySerial.csv")
+  
+  
+* cross-tabulate the county data 
+  
+  
+  
+  nbcdCountyAldb <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "aldb"),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyAldb,
+    colnames( nbcdCountyAldb),
+    str_replace(
+      str_replace(
+        colnames( nbcdCountyAldb),
+        "TRUE_", "yes"),
+      "FALSE_", "no"))
+  
+  nbcdCountyAldbMeans <- 
+    data.table(
+      cast(
+        data=
+        statsNbcdCounty[
+          I( nbcd),
+          list( aldbAve= weighted.mean( aldb, ha, na.rm= TRUE)),
+          by= c( "state", "county", "gap")],
+        formula= state + county ~ gap,
+        value= "aldbAve"),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyAldbMeans,
+    c( "FALSE", "TRUE"),
+    c( "noAll", "yesAll"))
+  
+  nbcdCountyGapFrac <-
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        formula= state + county ~ gap,
+        value= "frac",
+        fun.aggregate= sum,
+        na.rm= TRUE),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyGapFrac,
+    c( "FALSE", "TRUE"),
+    c( "noAllFr", "yesAllFr"))
+  
+  nbcdCountyGapHa <-
+    data.table(
+      cast(
+        data= statsNbcdCounty[, list( ha=sum( ha)),
+          keyby= "state,county,gap,nbcd"],
+        formula= state + county ~ gap + nbcd,
+        value= "ha"),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyGapHa,
+    c( "FALSE_FALSE", "FALSE_TRUE", "TRUE_FALSE", "TRUE_TRUE"),
+    c( "noAllHaN", "noAllHa", "yesAllHaN", "yesAllHa"))
+  
+  nbcdCountyFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "frac"),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyFrac,
+    colnames( nbcdCountyFrac)[ -(1:2)],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdCountyFrac)[ -(1:2)],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Fr", sep= ""))
+  
+  nbcdNullCountyFrac <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= !nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "frac"),
+      key= "state,county")
+  
+  setnames(
+    nbcdNullCountyFrac,
+    colnames( nbcdNullCountyFrac)[ -(1:2)],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdNullCountyFrac)[ -(1:2)],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "FrN", sep= ""))
+  
+  nbcdCountyHa <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "ha",),
+      key= "state,county")
+  
+  setnames(
+    nbcdCountyHa,
+    colnames( nbcdCountyHa)[ -(1:2)],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdCountyHa)[ -(1:2)],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "Ha", sep= ""))
+  
+  nbcdNullCountyHa <- 
+    data.table(
+      cast(
+        data= statsNbcdCounty,
+        subset= !nbcd,
+        formula= state + county ~ gap + nlcd,
+        value= "ha",),
+      key= "state,county")
+  
+  setnames(
+    nbcdNullCountyHa,
+    colnames( nbcdNullCountyHa)[ -(1:2)],
+    paste(
+      str_replace(
+        str_replace(
+          colnames( nbcdNullCountyHa)[ -(1:2)],
+          "TRUE_", "yes"),
+        "FALSE_", "no"),
+      "HaN", sep= ""))
+  
+  
+  nbcdCounty <-
+    nbcdCountyAldb[ nbcdCountyAldbMeans]
+  nbcdCounty <-
+    nbcdCounty[ nbcdCountyGapFrac][ nbcdCountyGapHa]
+  nbcdCounty <-
+    nbcdCounty[ nbcdCountyFrac][ nbcdCountyHa]
+  nbcdCounty <-
+    nbcdCounty[ nbcdNullCountyFrac][ nbcdNullCountyHa]
+  
+  nbcdCounty <-
+    nbcdCounty[, fips := paste( state, county, sep= "")]
+  nbcdCounty <-
+    nbcdCounty[, state := NULL][, county := NULL]
+  setkey( nbcdCounty, fips)
+  setcolorder( nbcdCounty, order( colnames( nbcdCounty)))
+  
+  nbcdCountyChar <-
+    str_trim(
+      format.df(
+        nbcdCounty,
+        cdec= sapply(
+          colnames( nbcdCounty),
+          function( x)
+          ifelse(
+            x == "fips", 0,
+            ifelse(
+              str_detect( x, "HaN?$"), 1,
+              ifelse(
+                str_detect( x, "FrN?$"), 3,
+                1)))),
+        numeric.dollar= FALSE,
+        na.blank= TRUE))
+  
+  write.csv(
+    nbcdCountyChar,
+    row.names= FALSE,
+    file= "pad-us_nlcd/nbcdCounty.csv",
+    quote= FALSE)
+  
+  zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCounty.csv")
+  
+  options(useFancyQuotes = FALSE)
+  cat(
+    sapply(
+      colnames( nbcdCounty),
+      function( x) {
+        dQuote(
+          ifelse(
+            x == "fips", "String(5)",
+            ifelse(
+              str_detect( x, "HaN?$"),
+              "Real(10.1)",
+              ifelse(
+                str_detect( x, "FrN?$"),
+                "Real(5.3)",
+                "Real(5.1)"))))
+      }),
+    sep= ",",
+    file= "pad-us_nlcd/nbcdCounty.csvt")
+  options(useFancyQuotes = TRUE)
+  
+  ogr2ogr <-
+    paste(
+      "ogr2ogr -overwrite -progress -sql",
+      sprintf(
+        "\"select %s from cusaCountiesAea a",
+        paste( colnames( nbcdCounty), collapse= ",")),
+      "left join 'pad-us_nlcd/nbcdCounty.csv'.nbcdCounty b",
+      "on a.GEOID10 = b.fips\"",
+      "pad-us_nlcd/nbcdCounty.shp shp/cusaCountiesAea.shp")
+  
+  system( ogr2ogr)
+  
+  zip(
+    "pad-us_nlcd.zip",
+    list.files(
+      path= "pad-us_nlcd",
+      pattern= "^nbcdCounty\\.[a-z]{3}$",
+      full.names= TRUE))
+  
+  
+  
+
+4 Plots 
+========
+
+
+
+
+  library( ggplot2)
+  library( scales)
+  
+  ## totalTonnes <-
+  ##   statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE)),
+  ##                   keyby= "gap,nlcd"]
+  
+  ## totalTonnes[, labelY := aldb/2 + c(0, cumsum( aldb)[-length( aldb)])]
+  
+  ## totalTonnes[, pct := round( aldb / sum( aldb) *100, 1)]
+  ## totalTonnes[, label := ifelse( pct >= 0.5,
+  ##                 sprintf( "%s, %3.1f%%", nlcd, pct), "")]
+  
+  ## totalTonnes[, label := sprintf( "%s, %d%%", nlcd, pct)]
+  
+  
+  
+  totalTonnes <-
+    statsNbcdCounty[, list( aldb= sum( aldb * ha, na.rm= TRUE),
+                           ha= sum( ha, na.rm= TRUE)),
+                    keyby= "nlcd,gap"]
+  totalTonnes <-
+    totalTonnes[, aldbFrac := aldb / sum( aldb)]
+  totalTonnes <-
+    totalTonnes[, haFrac := ha / sum( ha)]
+  
+  nlcdColors <-
+    c(
+      "11" = "#5475A8",
+      "12" = "#FFFFFF",
+      "21" = "#E8D1D1",
+      "22" = "#E29E8C",
+      "23" = "#FF0000",
+      "24" = "#B50000",
+      "31" = "#D2CDC0",
+      "41" = "#85C77E",
+      "42" = "#38814E",
+      "43" = "#D4E7B0",
+      "52" = "#DCCA8F",
+      "71" = "#FDE9AA",
+      "81" = "#FBF65D",
+      "82" = "#CA9146",
+      "90" = "#C8E6F8",
+      "95" = "#64B3D5")
+  
+  nlcdCovers <-
+    c(
+      "11" = "water",
+      "12" = "ice",
+      "21" = "dev open",
+      "22" = "dev low",
+      "23" = "dev med",
+      "24" = "dev high",
+      "31" = "barren",
+      "41" = "deciduous",
+      "42" = "evergreen",
+      "43" = "mixed",
+      "52" = "shrub",
+      "71" = "grass",
+      "81" = "pasture",
+      "82" = "crop",
+      "90" = "woody wet",
+      "95" = "wetland")
+  
+  nlcdMeta <-
+    data.table(
+      nlcd= factor( names( nlcdColors)),
+      color= nlcdColors,
+      cover= nlcdCovers,
+      key= "nlcd")
+  
+  totalTonnes[, list( gap, nlcd,
+                     frac = sprintf( "%5.4f", frac)),
+              key= "nlcd"][ nlcdMeta]
+  
+  totalTonnes <-
+    totalTonnes[, nlcd := reorder( factor(nlcd), aldbFrac, max)]
+  setkey( totalTonnes, nlcd)
+  
+  ## with( totalTonnes, reorder( factor(nlcd), frac, max))
+  
+  
+  ( massFracPlot <-
+   ggplot(
+     totalTonnes,
+     aes(
+       x= nlcd,
+       y= aldbFrac,
+       color= gap )) +
+   geom_point(
+     size= 4) +
+   scale_x_discrete(
+     name= "NLCD 2001 v1", ## ) +
+     labels= nlcdMeta[ J( levels( totalTonnes$nlcd))][, cover]) +
+   ylab( "Total mass fraction") +
+   scale_color_manual(
+     values= c( ## "#8C510A",
+       "#D8B365", ## 0xF6E8C3; 0xC7EAE5;
+       "#5AB4AC" ## "#01665E"
+       )) + 
+   coord_flip() +
+   labs( colour= "Protected") +
+   theme_bw())
+  
+  
+  ## massFracPlot +
+  ##   scale_y_log10(
+  ##     limits= c(0.003, 0.35),
+  ##     breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
+  ##     labels= percent)
+  
+  ## last_plot() +
+  ##   scale_y_log10(
+  ##     limits= c(0.003, 0.35),
+  ##     breaks= c( 0.01, 0.02, 0.03, 0.1, 0.2, 0.3), 
+  ##     labels= percent)
+
+   
+
+
+
+  suppressWarnings(
+    massFracPlot %+%
+    as.data.frame( totalTonnes[ aldbFrac > 0.003]) +
+    scale_x_discrete(
+      ## breaks= nlcdCovers[ as.character( totalTonnes[ frac > 0.003]$nlcd)],
+      labels= nlcdCovers[ as.character( totalTonnes[ aldbFrac > 0.003]$nlcd),
+        drop= TRUE]))
+
+
+[file:pad-us_nlcd/images/massFracPlot.png]
+
+
+
+  totalTonnes <-
+    totalTonnes[, nlcd := reorder( factor(nlcd), haFrac, max)]
+  setkey( totalTonnes, nlcd)
+  
+  ( areaFracPlot <-
+   ggplot(
+     totalTonnes,
+     aes(
+       x= nlcd,
+       y= haFrac,
+       color= gap )) +
+   geom_point(
+     size= 4) +
+   scale_x_discrete(
+     name= "NLCD 2001 v1", ## ) +
+     labels= nlcdMeta[ J( levels( totalTonnes$nlcd))][, cover]) +
+   ylab( "Total area fraction") +
+   scale_color_manual(
+     values= c( ## "#8C510A",
+       "#D8B365", ## 0xF6E8C3; 0xC7EAE5;
+       "#5AB4AC" ## "#01665E"
+       )) + 
+   coord_flip() +
+   labs( colour= "Protected") +
+   theme_bw())
+  
+  ## suppressWarnings(
+  ##   massFracPlot %+%
+  ##   as.data.frame( totalTonnes) + ##[ haFrac > 0.003]) +
+  ##  ylab( "Total area fraction") +
+  ##   scale_x_discrete(
+  ##     labels= nlcdCovers[ as.character( totalTonnes$nlcd), ##[ haFrac > 0.003]$nlcd),
+  ##       drop= TRUE]))
+
+
+[file:pad-us_nlcd/images/areaFracPlot.png]
+
+
+
+  zip(
+    "pad-us_nlcd.zip",
+    list.files( "pad-us_nlcd/images", "png$", full.names=TRUE))
+  file.copy(
+    from= list.files( "pad-us_nlcd/images", full.names= TRUE), 
+    to=   "~/Dropbox/Carbon Inventory/images",
+    overwrite= TRUE)
+  
+  file.copy(
+    from= "pad-us_nlcd.zip",
+    to=   "~/Dropbox/Carbon Inventory",
+    overwrite= TRUE)
+
+
+
+* TODO Work out a way to update changed files in the output .zip archive 
+  
+  
+
+5 Appendix 
+===========
+
+5.1 Software Environment 
+-------------------------
+
+
+
+GNU Emacs 24.3.50.1
+Copyright (C) 2013 Free Software Foundation, Inc.
+
+
+
+Org-mode version 7.9.4 (7.9.4-elpa @ /home/nbest/.emacs.d/elpa/org-20130318/)
+
+
+
+
+
+  R version 2.15.3 (2013-03-01)
+  Platform: x86_64-pc-linux-gnu (64-bit)
+  
+  locale:
+   [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
+   [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
+   [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+   [7] LC_PAPER=C                 LC_NAME=C                 
+   [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+  [11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+  
+  attached base packages:
+  [1] stats     graphics  grDevices utils     datasets  methods   base     
+  
+  other attached packages:
+   [1] rgdal_0.7-18     raster_1.9-70    sp_0.9-99        foreign_0.8-53  
+   [5] ascii_2.1        doMC_1.2.5       multicore_0.1-7  iterators_1.0.6 
+   [9] foreach_1.4.0    plyr_1.7.1       stringr_0.6.1    data.table_1.8.0
+  
+  loaded via a namespace (and not attached):
+  [1] codetools_0.2-8 compiler_2.15.3 grid_2.15.3     lattice_0.20-13
+  [5] parallel_2.15.3 tools_2.15.3
+
+
+
+
+
+
+  To cite package ‘raster’ in publications use:
+  
+    Robert J. Hijmans & Jacob van Etten (2012). raster: Geographic
+    analysis and modeling with raster data. R package version 1.9-70.
+    http://CRAN.R-project.org/package=raster
+  
+  A BibTeX entry for LaTeX users is
+  
+    @Manual{,
+      title = {raster: Geographic analysis and modeling with raster data},
+      author = {Robert J. Hijmans & Jacob van Etten},
+      year = {2012},
+      note = {R package version 1.9-70},
+      url = {http://CRAN.R-project.org/package=raster},
+    }
+  
+  ATTENTION: This citation information has been auto-generated from the
+  package DESCRIPTION file and may need manual editing, see
+  ‘help("citation")’ .
+  
+  To cite package ‘data.table’ in publications use:
+  
+    M Dowle, T Short and S Lianoglou (2012). data.table: Extension of
+    data.frame for fast indexing, fast ordered joins, fast assignment,
+    fast grouping and list columns.. R package version 1.8.0.
+    http://CRAN.R-project.org/package=data.table
+  
+  A BibTeX entry for LaTeX users is
+  
+    @Manual{,
+      title = {data.table: Extension of data.frame for fast indexing, fast ordered joins,
+  fast assignment, fast grouping and list columns.},
+      author = {M Dowle and T Short and S Lianoglou},
+      year = {2012},
+      note = {R package version 1.8.0},
+      url = {http://CRAN.R-project.org/package=data.table},
+    }
+  
+  ATTENTION: This citation information has been auto-generated from the
+  package DESCRIPTION file and may need manual editing, see
+  ‘help("citation")’ .
+
+
+
+
+  gdalinfo --version
+
+
+GDAL 1.9.2, released 2012/10/08
+
+
+
+
+  grass64 --version
+
+
+
+
+  GRASS GIS 6.4.2
+  
+  Geographic Resources Analysis Support System (GRASS) is Copyright,
+  1999-2012 by the GRASS Development Team, and licensed under terms of the
+  GNU General Public License (GPL) version >=2.
+   
+  This GRASS 6.4.2 release is coordinated and produced by the
+  GRASS Development Team with contributions from all over the world.
+  
+  This program is distributed in the hope that it will be useful, but
+  WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  General Public License for more details.
+
+
+
+* TODO include version and environment info from the various tools 
+  
+* TODO copy software BibTeX entries to database 
+  

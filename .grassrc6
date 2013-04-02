@@ -1,4 +1,4 @@
-GISDBASE: data/grass
+GISDBASE: ./data/grass
 LOCATION_NAME: cUSA
 MAPSET: PERMANENT
 GRASS_GUI: text

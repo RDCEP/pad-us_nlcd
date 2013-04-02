@@ -1,3 +1,6 @@
+*.pdf
+*.lot
+*.lof
 *.dbf
 *.prj
 *.qix

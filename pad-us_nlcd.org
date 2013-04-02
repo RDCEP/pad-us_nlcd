@@ -1,14 +1,15 @@
 #+TITLE:     Synthesis of a disaggregated carbon inventory for the conterminous United States
 #+AUTHOR:    Neil Best, Joshua Elliott
-#+EMAIL:     nbest@ci.uchicago.edu
+#+EMAIL:     nbest@ci.uchicago.edu, jelliott@ci.uchicago.edu
 #+DATE:      
 #+DESCRIPTION: Where does the description appear?
 #+KEYWORDS: woody biomass, land cover, protected areas
 #+LANGUAGE:  en
-#+OPTIONS:   H:3 num:t toc:t \n:nil @:t ::t |:t ^:t -:t f:t *:t <:t
-#+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t pri:nil tags:not-in-toc
+#+OPTIONS:   H:3 num:t toc:2 \n:nil @:t ::t |:t ^:t -:t f:t *:t <:t
+#+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t tasks:t pri:nil tags:not-in-toc
+#+OPTIONS:   author:t email:t timestamp:t
 #+INFOJS_OPT: view:nil toc:nil ltoc:t mouse:underline buttons:0 path:http://orgmode.org/org-info.js
-#+EXPORT_SELECT_TAGS: export
+#+EXPORT_SELECT_TAGS: 
 #+EXPORT_EXCLUDE_TAGS: noexport
 #+LINK_UP:   
 #+LINK_HOME: 
@@ -23,13 +24,14 @@
       (format "%% Org-mode is exporting headings to %s levels.\n"
               depth)))
   (setq org-export-latex-format-toc-function 'org-export-latex-no-toc)
+  (setq org-export-babel-evaluate nil) 
 #+END_SRC
 
 #+BEGIN_abstract
 This technical paper describes and reveals the process of creating a
 disaggregated carbon inventory dataset based on three base datasets.
 The carbon density distribution for above-ground live dry woody
-biomass is taked from the National Biomass and Carbon Dataset (NBCD)
+biomass is taken from the National Biomass and Carbon Dataset (NBCD)
 from the Woods Hole Research Center (WHRC).  We use the National Land
 Cover Dataset (NLCD) of 2001 to assign each carbon density reading to
 a cover class.  The Protected Areas Database for the United States
@@ -43,13 +45,20 @@ conversion analyses that aim to capture the complete carbon cycle
 implications of converting forested land to biofuel crops, for
 example.
 #+END_abstract
+#+LATEX: \tableofcontents
+#+LATEX: \listoftables
+#+LATEX: \listoffigures
 
+**** TODO fix multiple authors
 
 * Introduction
 
-*** Motivation
+** TODO [exact name of biofuels program]
 
-**** TODO some prose about the biofuels program?
+some prose about the biofuels program?
+
+
+** Motivation
 
 To apply the information contained in the National Biomass and Carbon
 Dataset (NBCD) to an analysis of the land use change implications of
@@ -65,17 +74,17 @@ indicated at a given location and its cultural or ecological context
 we use the National Land Cover Database (NLCD).  Similarly to
 distignuish areas based on their legal protection status we bring in
 the Protected Areas Database of the United States (PAD-US). By
-assigning attributes from NLCD and PAD-US to the corresponding
-biomass inventory indicated by a given pixel in the NBCD data we are
-able to disaggregate the total biomass into categories given by the
-Cartesian product of the individual datasets' categories. More detail
-on this in section ______. 
+assigning attributes from NLCD and PAD-US to the corresponding biomass
+inventory indicated by a given pixel in the NBCD data we are able to
+disaggregate the total biomass into categories given by the Cartesian
+product of the individual datasets' categories. More detail on this in
+section ______.
+
 
 **** TODO cite NBCD, NLCD, PAD-US
-
 **** TODO cross-reference to section on data set details
 
-*** Analysis Framework
+** Analysis Framework
 
 A secondary goal of this work is to demonstrate a framework for
 reproducible research.  Unless you are browsing the source code
@@ -90,10 +99,30 @@ Library (GDAL) for manipulation of vector and raster datasets, GRASS
 for analysis and tabulation of GIS data, and R for aggregation and
 formatting of the data. 
 
-**** TODO cite Emacs, Org-mode, R, GRASS, GDAL, raster
+**** TODO cite Emacs, Org-mode, R, GRASS, GDAL, raster, data.table
+
+Full software version information is available in the appendix.
 
 
-*** Summary of Methodology
+#+NAME: init
+#+BEGIN_SRC R :tangle tangled/init.R :exports code
+  ## library( raster)
+  library( raster, lib.loc="~/src/R/lib/")
+  setOptions( progress= "text")
+  library( plyr)
+  library( stringr)
+  library( ascii)
+  options( asciiType= "org")
+  library( reshape)
+  library( Hmisc)
+  library( data.table)
+  
+  ## overwriteRasters <- TRUE
+  
+#+END_SRC
+
+
+** Summary of Methodology
 
 The initial goal of this work was to assign protection status to areas
 of the various land cover classes.  Because PAD-US has coverage
@@ -107,16 +136,16 @@ available in the future.
 
 To satisfy various modelling and reporting requirements we have
 adopted three modes of disaggregation of the woody biomass: state,
-county, and 5 arc-minute ($5'$) grid cells.  Clearly the first two
-are dependent and nested -- the total biomass in a state is the sum
-of the biomass of its counties.  Apart from the political boundaries
-it is common practice to subdivide the globe or regions thereof into
-units based on geographic coordinates, i.e. longitude and latitude.
-At $5'% (one twelfth of a degree) resolution a grid cell is roughly
-30km on a side at the equator.  The variation in area of these grid
-cells must be accounted for in any comparison among or summation
-across grid cells, but this complication is accepted as a trade-off
-against working in familiar map coordinates.
+county, and 5 arc-minute ($5'$, one twelfth of a degree) grid cells.
+Clearly the first two are dependent and nested -- the total biomass in
+a state is the sum of the biomass of its counties.  Apart from the
+political boundaries it is common practice to subdivide the globe or
+regions thereof into units based on geographic coordinates,
+i.e. longitude and latitude.  At $5'$ resolution a grid cell is
+roughly 10 km on a side at the equator.  The variation in area of
+these grid cells must be accounted for in any comparison among or
+summation across grid cells, but this complication is accepted as a
+trade-off against working in familiar map coordinates.
 
 In all cases we chose to reproject the units of disaggregation, being
 the states, counties, and grid cells, into the native representation
@@ -143,30 +172,12 @@ guarantee that the sum total of all given biomass will be conserved.
 
 **** TODO Add an emacs-lisp function call to the makefile to evaluate the R code 
 
-This has to happen before tangling out the noweb components.
+This has to happen before tangling out the noweb components.  However,
+it is possible that the need for this has gone away with new versions
+of Org since this project began.
 
 
-* initialize the session
-
-#+NAME: init
-#+BEGIN_SRC R :tangle tangled/init.R
-## library( raster)
-library( raster, lib.loc="~/src/R/lib/")
-setOptions( progress= "text")
-library( plyr)
-library( stringr)
-library( ascii)
-options( asciiType= "org")
-
-overwriteRasters <- TRUE
-
-#+END_SRC
-
-
-**** TODO include version and environment info from the various tools
-
-
-* COMMENT are these obsolete?
+* are these obsolete?						   :noexport:
 ** process Puerto Rico to work out steps
 
 #+NAME: grid
@@ -222,11 +233,11 @@ overwriteRasters <- TRUE
 #+results:
 
 
-* load NLCD rasters
+* load NLCD rasters						   :noexport:
 
 
 #+NAME: regionPatterns
-#+BEGIN_SRC R :results silent :tangle tangled/init.R
+#+BEGIN_SRC R :results silent :tangle no
 regionPatterns <-
   list(
     Nlcd01v1PR= "pr.*?img$",
@@ -259,17 +270,108 @@ nlcdRasters <-
 #+END_SRC
 
 
-* calculate 5' cell ID for each 30m pixel
+* Underlying datasets
 
-Write out a 5' raster in geographic projection where the value of each
-cell is its grid ID.  This will be reprojected into the cooridnate
-space of each PAD-US/NLCD stack.
+This section describes the input datasets that go into this analysis
+in greater detail than what was offerd in the introduction.
+Conceptually the analysis employs land use / land cover information
+from NLCD, legal protection status from PAD-US, and political
+boundaries from the US Census to disaggregate undifferentiated
+estimates of woody biomass, i.e. ALDB, which is assumed to be 50%
+carbon by mass, taken from NBCD.  The analysis also employs another
+spatial divisions of disaggregation, the $5'$ grid cells, which are
+also defined here for completeness.
+
+** TODO Describe NBCD ALDB and BAWH
+
+** TODO cite NBCD web site and in-review paper
+
+Kellndorfer, J., Walker, W., LaPoint, E., Bishop, J., Cormier, T.,
+Fiske, G., Hoppus, M., Kirsch, K., and Westfall, J. 2012. NACP
+Aboveground Biomass and Carbon Baseline Data (NBCD 2000),
+U.S.A., 2000. Data set. Available on-line [http://daac.ornl.gov] from
+ORNL DAAC, Oak Ridge, Tennessee,
+U.S.A. http://dx.doi.org/10.3334/ORNLDAAC/1081 or at
+http://www.whrc.org/mapping/nbcd/
+
+Kellndorfer, J.M., Walker, W.S., Kirsch, K.M., Fiske, G., Bishop, J.,
+LaPoint, E., Hoppus, M, & Westfall, J. The National Biomass and Carbon
+data set 2000 (NBCD 2000): A high resolution baseline for the
+conterminous U.S. Remote Sensing of Environment, Submitted.
+
+
+** NLCD land use/land cover and canopy density
+
+
+**** TODO Describe NLCD land use/land cover and canopy density
+
+
+** Dependency of NBCD on NLCD
+
+One important factor that influenced our operational choices in
+carrying out the analysis is the dependence between NLCD and NBCD.
+NBCD's ALDB densities are only calculated where NLCD's canopy density
+is non-zero and WHRC's radar-derived basal area weighted height
+(BAWH) is also non-zero.  Because NBCD is modelled based on the first
+version of the 2001 NLCD and that is the only version for which
+canopy density is provided it is meaningless to disaggregate ALDB
+based on subsequent versions of NLCD.  The classification accuracy of
+NLCD 2001 version 1 is described in _____.  
+
+**** TODO cite carbon mass fraction of ALDB from WHRC 
+
+**** TODO cite NLCD 2001 v1 accuracy assessment
+
+**** TODO explain which NLCD classes are modelled for ALDB
+
+
+* Analysis Procedure
+
+Conceptually our method reduces to a brute-force tabulation exercise.
+We are simply constructing classifications of the following forms:
+
+- grid ID, land use/cover, protection status
+- state, county, land use/cover, protection status
+
+By tabulating NBCD pixels on these bases we are able sum up the ALDB
+densities for a given set of identifiers in the above schema.  For
+this method to work it is necessary to convert all of the variables
+into rasters of the same projection, extent, and resolution so that
+there is a one-to-one relationship between pixels among the variables.
+For this analysis we have chosen to work in the Albers equal-area
+projection used by NBCD and NLCD to avoid performing any
+transformation on them.  PAD-US and the political boundaries are
+provided in vector form so they are reprojected and converted to
+rasters.  Similarly the $5'$ grid cells that are regular in
+geographic coordinates are reprojected into irregular areas in the
+target projection so that each NBCD/NLCD pixel is assigned a grid
+cell ID.
+
+
+** Reproject the $5'$ grid cells
+
+For convenience we adopt a scheme for identifying the $5'$ grid cells
+using sequential integers rather than decimal coordinates.  By
+stipulating that any grid we wish to consider in our models is either
+a global grid or a subset thereof the only parameter that must be
+tracked is the resolution.  Cell number one has its upper left corner
+at 180 degrees west longitude and 90 degrees north latitude (-180,90)
+by convention.  From there the cell numbers increase to the east and
+then resume at the western edge when eastern edge is reached.  =R='s
+=raster= package provides a convenient abstraction for specifying and
+instantiating such simply formulated rasters.  The following code
+performs these steps:
+
+1. Create a global raster in geogrpahic coordinates by default.
+2. Set the resolution to $5'$.
+3. Assign values to its cells from a sequence that runs from one to
+   the number of cells.
+4. Write the data to a file.
 
 #+NAME: world  
 #+BEGIN_SRC R :tangle tangled/init.R
   world <- raster()
   res( world) <- 5/60
-  ## dataType( world) <- "INT4U"
   world[ ] <-
     1:ncell( world)
   world <-
@@ -279,7 +381,37 @@ space of each PAD-US/NLCD stack.
       overwrite= overwriteRasters)
 #+END_SRC
 
-#+begin_src makefile :eval no :tangle tangled/pad-us_nlcd.mk
+The cUSA study area covers only a subset of these cells.  Using the
+=gdalwarp= utility from GDAL we can specify a target projection,
+extent, and resolution that match NBCD/NLCD.
+
+#+BEGIN_SRC sh :exports code :results replace output :tangle tangled/grid5min.sh
+  cusaProj='+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 cusaProj'
+  cusaProj+='+lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs'
+  
+  gdalwarp -overwrite -of HFA \
+      -t_srs ${cusaProj} \
+      -te -2493045 177285 2342655 3310005 \
+      -tr 30 30 -co "COMPRESSED=YES" \
+      data/grid5minWorld.tif data/grid5minAeaCUSA.img
+  
+#+END_SRC
+
+
+*** cUSA-only makefile fragment					   :noexport:
+
+#+begin_src makefile :eval no :tangle tangled/pad-us_nlcd.mk :exports none
+data/grid5minAeaCUSA.img: 
+	gdalwarp -overwrite -of HFA \
+          -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
+          -te -2493045 177285 2342655 3310005 \
+          -tr 30 30 -co "COMPRESSED=YES" data/grid5minWorld.tif $@
+#+end_src
+
+
+*** larger makefile fragment for multiple regions		   :noexport:
+
+#+begin_src makefile :eval no :tangle no
 data/grid5minAeaCUSA.img: grid5minWorld.tif
 	gdalwarp -overwrite -of HFA \
           -t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
@@ -312,14 +444,7 @@ grids: data/grid5minAeaCUSA.img \
 #+end_src
 
 
-*** COMMENT DONE How did I write the gdalwarp command for the grid IDs?
-I must have done it by hand.  This should be tangled out and called in
-the Makefile.
-
-*** TODO get overwriteRasters value from environment variable
-
-
-** COMMENT add zeroes to GAP data for unprotected land and coastal areas
+** add zeroes to GAP data for unprotected land and coastal areas   :noexport:
 
 skip this. unnecessary.
 
@@ -372,7 +497,7 @@ gapOverlays <-
 #+results:
    
 
-** COMMENT create stacks and tabulate
+** create stacks and tabulate					   :noexport:
 
 This is too slow.  Had to do it in GRASS.
 #+NAME: stacks
@@ -407,9 +532,14 @@ ctFiles <- llply( regions, writeCrosstabs)
 #+END_SRC
 
 
-* noweb componenets for GRASS scripts
+** noweb componenets for GRASS scripts				   :noexport:
 
-** initialize a GRASS session
+These noweb components were more useful when they could be applied to
+the various regions but for now, with just one region in play, we will
+gloss over this aspect and describe the GRASS code where it is
+expanded below.
+
+*** initialize a GRASS session
 
 #+NAME: grassInit
 #+begin_src sh :eval no
@@ -424,7 +554,8 @@ export GIS_LOCK=$$
 export GISRC=./.grassrc6
 #+end_src
 
-** create the GRASS location and import the reprojected grid
+
+*** create the GRASS location and import the reprojected grid
 
 #+NAME: grassCreate
 #+BEGIN_SRC sh :eval no
@@ -433,14 +564,14 @@ g.gisenv set=LOCATION_NAME=$GIS_LOCK
 eval $(g.gisenv)
 mkdir -p $GISDBASE/$GIS_LOCK
 g.mapset -c mapset=temp
-r.in.gdal in=aeaGrid5min${LOCATION}.img out=grid_5min location=${LOCATION}
+r.in.gdal in=data/aeaGrid5min${LOCATION}.img out=grid_5min location=${LOCATION}
 g.mapset mapset=PERMANENT location=${LOCATION}
 rm -rf $GISDBASE/$GIS_LOCK/temp
 r.in.gdal input=pad-us/data/PADUS1_2_${LOCATION}_GAP.tif output=gap
 #+END_SRC
 
-
-** compose the r.in.gdal commands using the R data structures
+   
+*** compose the r.in.gdal commands using the R data structures
 #+NAME: rInGdalNlcd( region= "Nlcd01v1PR")
 #+BEGIN_SRC R :results output verbatim replace 
 path <-
@@ -457,10 +588,10 @@ cat( sprintf( "r.in.gdal input=%s output=%s", path, region), "\n")
 : r.in.gdal input=nlcd/pr_landcover_wimperv_10-28-08_se5.img output=Nlcd01v1PR
 
 
-*** TODO add '-N' to r.stats for NLCD/GAP tabulation to eliminate *,*,*,n record created by the mask
-    
+**** TODO add '-N' to r.stats for NLCD/GAP tabulation to eliminate *,*,*,n record created by the mask
+     
 
-** compose the r.stats commands for  the grid/NLCD/GAP tabulation
+*** compose the r.stats commands for  the grid/NLCD/GAP tabulation
 
 #+NAME: grassMapcalc
 #+BEGIN_SRC sh :eval no
@@ -473,7 +604,7 @@ r.stats -c input=grid_5min fs=, >> grid${NLCD}.csv
 #+END_SRC
 
 
-** clean up
+*** clean up
 
 #+NAME: grassCleanup
 #+begin_src sh :eval no
@@ -485,7 +616,7 @@ rm -rf /tmp/grass6-$USER-$GIS_LOCK
 #+end_src
 
 
-* compose and execute the GRASS scripts
+** compose and execute the GRASS scripts			   :noexport:
     :PROPERTIES:
     :noweb:    yes
     :shebang:  #!/bin/bash -v
@@ -544,86 +675,216 @@ NLCD=Nlcd06
 #+END_SRC
 
 
-* ingest the NBCD data and retabulate
+** Download and prepare inputs
+
+*** NLCD
+
+The first version of the 2001 NLCD is available as a single raster
+file so no special preparation is required.
+
+
+*** NBCD
+
+The second version of the NBCD is divided according to "mapping zones"
+and so must be patched together to form a continuous coverage.  We do
+this using GDAL's =gdalbuildvrt= to build a virtual raster from the
+collection of downloaded mapping zone tiles.  The caveat which comes
+with this approach is that the individual NBCD rasters include a small
+buffer outside the boundary of the respective mapping zone which means
+that there will be one or more NBCD rasters that contain estimates for
+pixels on either side of the mapping zone boundaries.  Because the
+model that produces the NBCD estimates has a stochastic component
+estimates for a given pixel within these overlapping buffer zones are
+not constrained to have the same value.  From [[http://gdal.org/gdalbuildvrt.html][the =gdalbuildvrt= page on
+gdal.org]]:
+
+#+begin_quote
+If there is some amount of spatial overlapping between files, the
+order may depend on the order they are inserted in the VRT file, but
+this behaviour should not be relied on.
+#+end_quote
+
+The best action we could take to maintain reproducibility in this
+situation is to ensure that the arguments to the =gdalbuildvrt=
+utility, the names of the NBCD tiles, are given to in lexicographic
+order.
+
+**** TODO either copy or include code from NBCD submodule
+
+
+*** PAD-US
+
+
+*** State and county boundaries
+
+
+** Load the data into GRASS
     :PROPERTIES:
     :noweb:    yes
     :shebang:  #!/bin/bash -v
-    :session:  nil
-    :eval:     no
+    :session:  *shell*
+    :eval:     yes
+    :results:  output verbatim replace
     :END:
 
-#+NAME: grassNbcd
-#+BEGIN_SRC sh :tangle tangled/grassNbcd.sh
-<<grassInit>> #
-g.gisenv set=LOCATION_NAME=cUSA
-g.gisenv set=MAPSET=PERMANENT
-eval $(g.gisenv)
+Due to the volume of data involved in computations at continental
+extents and 30m resolution processing performance becomes a critical
+factor.  At the time of this writing the performance of =GRASS='s
+=r.stats= utility far outstrips that of Hijman & van Etten's =raster=
+package for =R= in computing pixel count tabulations.  Therefore it is
+worth the trouble to populate as =GRASS= database and convolve our
+input data sets there.
 
-export GRASS_MESSAGE_FORMAT=plain 
-r.in.gdal --overwrite -e input=nbcd/data/nbcdAldb.vrt output=nbcdAldb
-r.in.gdal --overwrite -e input=nbcd/data/nbcdBawh.vrt output=nbcdBawh
-r.in.gdal --overwrite -e \
-    input=nlcd/nlcd2001_canopy_mosaic_1-29-08/nlcd_canopy_mosaic_1-29-08.img \
-    output=canopy
-# r.in.gdal --overwrite input=cusaStatesAea.img output=states
-# r.in.gdal --overwrite input=cusaCountiesAea.img output=counties
-# r.in.gdal --overwrite input=nbcdZones.img output=zones
+**** TODO check if =raster= has improved tabulation performance.
 
-# g.region rast=nbcd
-# r.mapcalc nbcdZero='if( isnull( nbcd), 0, nbcd)'
 
-g.region rast=Nlcd01v1
-r.mask -o input=Nlcd01v1 maskcats="1 thru 95"
+*** Load the data into GRASS the old way			   :noexport:
 
-r.mapcalc nbcdMask='eval( nbcd=canopy > 0 && nbcdBawh > 0, if( isnull( nbcd), 0, nbcd))'
-
-# echo grid_5min,Nlcd01v1,gap,aldb,n > data/statsNbcdNlcd01v1Grid5min.csv && \
-# r.stats -Nc input=grid_5min,Nlcd01v1,gap,nbcdAldb fs=, >> data/statsNbcdNlcd01v1Grid5min.csv 2> data/statsNbcdNlcd01v1Grid5min.err &
-
-echo state,county,Nlcd01v1,gap,nbcd,aldb,n > data/statsNbcdNlcd01v1County.csv \
-    && r.stats -Nc input=states,counties,,Nlcd01v1,gap,nbcdMask,nbcdAldb fs=, \
-    >> data/statsNbcdNlcd01v1County.csv \
-    2> data/statsNbcdNlcd01v1County.err &
-
-# echo zone,Nlcd01v1,gap,aldb,n > data/statsNbcdNlcd01v1Zone.csv && \
-# r.stats -Nc input=zones,Nlcd01v1,gap,nbcd fs=, >> data/statsNbcdNlcd01v1Zone.csv 2> data/statsNbcdNlcd01v1Zone.err &
-
-# g.region rast=Nlcd01v2
-# r.mask -o input=Nlcd01v2 maskcats="1 thru 95"
-
-# echo grid_5min,Nlcd01v2,gap,nbcd,n > data/statsNbcdNlcd01v2Grid5min.csv && \
-# r.stats -Nc input=grid_5min,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2Grid5min.csv 2> data/statsNbcdNlcd01v2Grid5min.err &
-
-# echo state,county,nlcd01v2,gap,nbcd,n > data/statsNbcdNlcd01v2County.csv && \
-# r.stats -Nc input=states,counties,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2County.csv 2> data/statsNbcdNlcd01v2County.err &
-
-# echo zone,nlcd01v2,gap,nbcd,n > data/statsNbcdZone.csv && \
-# r.stats -Nc input=zones,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2Zone.csv 2> data/statsNbcdNlcd01v2Zone.err &
-
-# g.region rast=Nlcd06
-# r.mask -o input=Nlcd06 maskcats="1 thru 95"
-
-# echo grid_5min,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06Grid5min.csv && \
-# r.stats -Nc input=grid_5min,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06Grid5min.csv 2> data/statsNbcdNlcd06Grid5min.err &
-
-# echo state,county,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06County.csv && \
-# r.stats -Nc input=states,counties,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06County.csv 2> data/statsNbcdNlcd06County.err &
-
-# echo zone,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06Zone.csv && \
-# r.stats -Nc input=zones,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06Zone.csv 2> data/statsNbcdNlcd06Zone.err &
-
-r.mask -r
-<<grassCleanup>>
-
+#+NAME: grassNbcdOld
+#+BEGIN_SRC sh :tangle no :eval no :exports none
+  cd ~/Desktop/pad-us_nlcd
+  LOCATION=cUSA
+  NLCD=Nlcd01v1
+  <<grassInit>>
+  <<grassCreate>>
+  <<rInGdalNlcd( "Nlcd01v1")>>
 #+END_SRC
 
-** TODO separate the import of the political units' rasters
+*** start GRASS
+
+#+NAME: grassNbcd
+#+BEGIN_SRC sh :tangle tangled/grassNbcd.sh :session *shell*
+  cd ~/Desktop/pad-us_nlcd
+  export GISRC=./.grassrc6
+  grass64 -text data/grass/cUSA/PERMANENT
+#+END_SRC
+
+**** TODO check that GRASS processing works out of the box
+
+Make sure that the bare GRASS database in the Git repo is enough to
+start the project cleanly.
 
 
-** TODO decide whether or not to throw out the other NLCD results
+*** Load the NBCD data
+
+#+BEGIN_SRC sh
+  # g.gisenv set=LOCATION_NAME=cUSA
+  # g.gisenv set=MAPSET=PERMANENT
+  eval $(g.gisenv)
+  
+  # export GRASS_MESSAGE_FORMAT=plain 
+  r.in.gdal --overwrite -e \
+    input=nbcd/data/nbcdAldb.vrt output=nbcdAldb
+  r.in.gdal --overwrite -e \
+    input=nbcd/data/nbcdBawh.vrt output=nbcdBawh
+#+END_SRC
 
 
-* aggregate the PAD-US results
+*** load the $5'$ grid cell IDs
+
+#+BEGIN_SRC sh
+  r.in.gdal in=data/grid5minAeaCUSA.vrt out=grid_5min
+#+END_SRC
+
+
+*** laod the PAD-US data
+
+#+BEGIN_SRC sh
+  r.in.gdal input=pad-us/data/PADUS1_2_cUSA_GAP.tif output=gap
+#+END_SRC
+
+
+*** Load the NLCD data
+
+#+BEGIN_SRC sh
+  <<rInGdalNlcd( "Nlcd01v1")>>
+  r.in.gdal --overwrite -e \
+    input=nlcd/data/nlcd2001_canopy_mosaic_1-29-08/nlcd_canopy_mosaic_1-29-08.img \
+    output=canopy
+#+END_SRC
+
+
+*** Load the state and county rasters
+
+#+BEGIN_SRC sh
+  r.in.gdal --overwrite -e \
+    input=data/cusaStatesAea.img output=states
+  r.in.gdal --overwrite -e \
+    input=data/cusaCountiesAea.img output=counties
+#+END_SRC
+
+
+*** Load the NBCD mapping zones					   :noexport:
+#+BEGIN_SRC sh
+   r.in.gdal --overwrite input=nbcdZones.img output=zones
+#+END_SRC  
+
+
+** Replace null values in NBCD with zeroes
+
+#+BEGIN_SRC sh
+  g.region rast=Nlcd01v1
+  r.mask -o input=Nlcd01v1 maskcats="1 thru 95"
+  
+  r.mapcalc nbcdMask='eval( nbcd=canopy > 0 && nbcdBawh > 0, if( isnull( nbcd), 0, nbcd))'
+  
+  # echo grid_5min,Nlcd01v1,gap,aldb,n > data/statsNbcdNlcd01v1Grid5min.csv && \
+  # r.stats -Nc input=grid_5min,Nlcd01v1,gap,nbcdAldb fs=, >> data/statsNbcdNlcd01v1Grid5min.csv 2> data/statsNbcdNlcd01v1Grid5min.err &
+  
+  echo state,county,Nlcd01v1,gap,nbcd,aldb,n > data/statsNbcdNlcd01v1County.csv \
+      && r.stats -Nc input=states,counties,Nlcd01v1,gap,nbcdMask,nbcdAldb fs=, \
+      >> data/statsNbcdNlcd01v1County.csv \
+      2> data/statsNbcdNlcd01v1County.err &
+#+END_SRC
+
+
+** Calculate statistics for other versions of NLCD		   :noexport:
+
+#+BEGIN_SRC sh
+  # echo zone,Nlcd01v1,gap,aldb,n > data/statsNbcdNlcd01v1Zone.csv && \
+  # r.stats -Nc input=zones,Nlcd01v1,gap,nbcd fs=, >> data/statsNbcdNlcd01v1Zone.csv 2> data/statsNbcdNlcd01v1Zone.err &
+  
+  # g.region rast=Nlcd01v2
+  # r.mask -o input=Nlcd01v2 maskcats="1 thru 95"
+  
+  # echo grid_5min,Nlcd01v2,gap,nbcd,n > data/statsNbcdNlcd01v2Grid5min.csv && \
+  # r.stats -Nc input=grid_5min,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2Grid5min.csv 2> data/statsNbcdNlcd01v2Grid5min.err &
+  
+  # echo state,county,nlcd01v2,gap,nbcd,n > data/statsNbcdNlcd01v2County.csv && \
+  # r.stats -Nc input=states,counties,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2County.csv 2> data/statsNbcdNlcd01v2County.err &
+  
+  # echo zone,nlcd01v2,gap,nbcd,n > data/statsNbcdZone.csv && \
+  # r.stats -Nc input=zones,Nlcd01v2,gap,nbcd fs=, >> data/statsNbcdNlcd01v2Zone.csv 2> data/statsNbcdNlcd01v2Zone.err &
+  
+  # g.region rast=Nlcd06
+  # r.mask -o input=Nlcd06 maskcats="1 thru 95"
+  
+  # echo grid_5min,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06Grid5min.csv && \
+  # r.stats -Nc input=grid_5min,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06Grid5min.csv 2> data/statsNbcdNlcd06Grid5min.err &
+  
+  # echo state,county,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06County.csv && \
+  # r.stats -Nc input=states,counties,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06County.csv 2> data/statsNbcdNlcd06County.err &
+  
+  # echo zone,nlcd06,gap,nbcd,n > data/statsNbcdNlcd06Zone.csv && \
+  # r.stats -Nc input=zones,Nlcd06,gap,nbcd fs=, >> data/statsNbcdNlcd06Zone.csv 2> data/statsNbcdNlcd06Zone.err &
+  
+#+END_SRC
+
+
+** remove the mask and exit GRASS				   :noexport:
+#+BEGIN_SRC 
+  r.mask -r
+  <<grassCleanup>>
+#+END_SRC
+
+
+**** DONE separate the import of the political units' rasters
+
+
+**** DONE decide whether or not to throw out the other NLCD results
+
+
+** aggregate the PAD-US results					   :noexport:
    :PROPERTIES:
    :eval:     no
    :END:
@@ -750,23 +1011,19 @@ r.mask -r
 #+end_src
    
 
-** TODO do this with data.table
+**** TODO do this with data.table
 
-   
-* generate NBCD statistics
-  :PROPERTIES:
-  :eval:     yes
-  :END:
+     
+** Aggregate the statistics
+   :PROPERTIES:
+   :eval:     yes
+   :END:
 
 
-** by 5' grid cells
+*** by 5' grid cells
 
 #+NAME: writeNbcdStats
 #+begin_src R 
-  library( reshape)
-  library( Hmisc)
-  library( data.table)
-
   stats <-
     read.csv( "statsNbcd.csv",
              na.strings= "*",
@@ -812,11 +1069,11 @@ r.mask -r
 #+end_src
   
 
-** TODO convert NAs to zeros for \*Fr and \*Ha in CSVs and SHPs
-** TODO trim spaces in char data frames before writing CSVs
+***** TODO convert NAs to zeros for \*Fr and \*Ha in CSVs and SHPs
+***** TODO trim spaces in char data frames before writing CSVs
 
 
-** load r.stats output
+*** load r.stats output
 
 #+begin_src R
 
@@ -879,7 +1136,7 @@ setkeyv( rawCountyStats, keycols)
 
 #+end_src
 
-** collapse the records for GAP values that are no longer differentiated
+*** collapse the records for GAP values that are no longer differentiated
 
 
 #+begin_src R
@@ -948,7 +1205,7 @@ qplot(
 #+results: forestHistDetail
 [[file:pad-us_nlcd/images/forestHistDetail.png]]
 
-** COMMENT by NBCD mapping zones
+*** COMMENT by NBCD mapping zones
    :PROPERTIES:
    :eval:     no
    :END:
@@ -1188,19 +1445,19 @@ qplot(
   
 #+end_src
 
-*** TODO finish updating zone stat procedure to match state/county
+**** TODO finish updating zone stat procedure to match state/county
 
 GAP TRUE/FALSE naming, . . .
 
 
-*** TODO figure out where null values in NBCD are coming from
+**** TODO figure out where null values in NBCD are coming from
 
 
-** repeat for states
+*** repeat for states
 
-*** calculate the average densities for original and modified pixel counts
+**** calculate the average densities for original and modified pixel counts
 
-**** TODO Figure out how to do self-join in functional form
+***** TODO Figure out how to do self-join in functional form
 
 #+begin_src R
   
@@ -1265,7 +1522,7 @@ ascii(
 #+END_ORG
 
 
-*** COMMENT these plots show states with problem forests
+**** COMMENT these plots show states with problem forests
 
 #+begin_src R :eval no
 
@@ -1335,7 +1592,7 @@ ggplot(
 #+end_src
 
 
-*** COMMENT backfill the null state densities with national means
+**** COMMENT backfill the null state densities with national means
 
 #+begin_src R :eval no
 ## statsNbcdState <-
@@ -1351,14 +1608,14 @@ ggplot(
 #+end_src
 
 
-*** calculate the grand total
+**** calculate the grand total
 
 #+begin_src R
   statsNbcdState[ I( nbcd), list( Gt= sum( aldb * ha) / 10^9)]
 #+end_src
 
 
-*** write out the state data in long form
+**** write out the state data in long form
 
 #+begin_src R
 
@@ -1374,7 +1631,7 @@ zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdStateSerial.csv")
 
 
 
-*** cross-tabulate the state data using backfilled densities
+**** cross-tabulate the state data using backfilled densities
 
 
 #+begin_src R
@@ -1623,11 +1880,11 @@ zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdStateSerial.csv")
 #+end_src
 
 
-*** COMMENT DONE figure out if is.na( aldb2) is correct
+**** COMMENT DONE figure out if is.na( aldb2) is correct
 
-    
+     
 
-** repeat for counties
+*** repeat for counties
 
 #+begin_src R
   ## library( reshape)
@@ -1680,7 +1937,7 @@ zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdStateSerial.csv")
   ## any( abs( statsNbcdCounty[, list( frac= sum(frac)), by= "state,county"][, frac] - 1) > 0.001)
 #+end_src
 
-*** check for cases where NBCD makes no prediction
+**** check for cases where NBCD makes no prediction
 
 NBCD only predicts biomass density where it has sufficient canopy
 density and basal area-weighted height to do so.  We can presume that
@@ -1785,7 +2042,7 @@ ascii(
 #+END_SRC
 
 
-*** TODO Make a table of these results
+**** TODO Make a table of these results
 
 #+begin_src R :results output org replace :exports results
 suppressWarnings(
@@ -1859,14 +2116,14 @@ suppressWarnings(
 #+END_ORG
 
 
-*** calculate the grand total
+**** calculate the grand total
 
 #+begin_src R
   statsNbcdCounty[ I( nbcd), list( Gt= sum( aldb * ha) / 10^9)]
 #+end_src
 
 
-*** write out the results in long form
+**** write out the results in long form
 
 #+begin_src R
 
@@ -1880,7 +2137,7 @@ zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCountySerial.csv")
 
 #+end_src
 
-*** cross-tabulate the county data
+**** cross-tabulate the county data
 
 #+begin_src R
   nbcdCountyAldb <- 
@@ -2112,7 +2369,7 @@ zip( "pad-us_nlcd.zip", "pad-us_nlcd/nbcdCountySerial.csv")
 #+end_src
 
 
-** Plots
+* Plots
 
 
 #+begin_src R
@@ -2310,10 +2567,11 @@ file.copy(
 
 #+end_src
 
-*** TODO Work out a way to update changed files in the output .zip archive
+
+**** TODO Work out a way to update changed files in the output .zip archive
 
 
-* cross-tabulate HWSD soil texture classes by county
+* cross-tabulate HWSD soil texture classes by county		   :noexport:
 
 #+begin_src sh :session *shell*
   wget http://webarchive.iiasa.ac.at/Research/LUC/External-World-soil-database/HWSD_Data/HWSD_RASTER.zip
@@ -2420,3 +2678,139 @@ Warp the HWSD raster into the cUSA GRASS location and generate the frequency sta
   zip( "data/hwsdTopTexCounty.zip", "data/hwsdTopTexCounty.csv")
   
 #+end_src
+
+
+* Appendix
+
+** Software Environment
+
+#+BEGIN_SRC sh :exports results :results replace output :session
+  emacs --version | head -n 2
+#+END_SRC
+
+#+RESULTS:
+: GNU Emacs 24.3.50.1
+: Copyright (C) 2013 Free Software Foundation, Inc.
+
+#+BEGIN_SRC emacs-lisp :exports results :results value replace
+  (org-version t t)
+#+END_SRC
+
+#+RESULTS:
+: Org-mode version 7.9.4 (7.9.4-elpa @ /home/nbest/.emacs.d/elpa/org-20130318/)
+
+#+BEGIN_SRC R :results output replace :exports results
+  sessionInfo()
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+R version 2.15.3 (2013-03-01)
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
+ [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
+ [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=C                 LC_NAME=C                 
+ [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+[11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] rgdal_0.7-18     raster_1.9-70    sp_0.9-99        foreign_0.8-53  
+ [5] ascii_2.1        doMC_1.2.5       multicore_0.1-7  iterators_1.0.6 
+ [9] foreach_1.4.0    plyr_1.7.1       stringr_0.6.1    data.table_1.8.0
+
+loaded via a namespace (and not attached):
+[1] codetools_0.2-8 compiler_2.15.3 grid_2.15.3     lattice_0.20-13
+[5] parallel_2.15.3 tools_2.15.3
+#+end_example
+
+#+BEGIN_SRC R :exports results :results replace output
+  citation( "raster")
+  citation( "data.table")
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+
+To cite package ‘raster’ in publications use:
+
+  Robert J. Hijmans & Jacob van Etten (2012). raster: Geographic
+  analysis and modeling with raster data. R package version 1.9-70.
+  http://CRAN.R-project.org/package=raster
+
+A BibTeX entry for LaTeX users is
+
+  @Manual{,
+    title = {raster: Geographic analysis and modeling with raster data},
+    author = {Robert J. Hijmans & Jacob van Etten},
+    year = {2012},
+    note = {R package version 1.9-70},
+    url = {http://CRAN.R-project.org/package=raster},
+  }
+
+ATTENTION: This citation information has been auto-generated from the
+package DESCRIPTION file and may need manual editing, see
+‘help("citation")’ .
+
+To cite package ‘data.table’ in publications use:
+
+  M Dowle, T Short and S Lianoglou (2012). data.table: Extension of
+  data.frame for fast indexing, fast ordered joins, fast assignment,
+  fast grouping and list columns.. R package version 1.8.0.
+  http://CRAN.R-project.org/package=data.table
+
+A BibTeX entry for LaTeX users is
+
+  @Manual{,
+    title = {data.table: Extension of data.frame for fast indexing, fast ordered joins,
+fast assignment, fast grouping and list columns.},
+    author = {M Dowle and T Short and S Lianoglou},
+    year = {2012},
+    note = {R package version 1.8.0},
+    url = {http://CRAN.R-project.org/package=data.table},
+  }
+
+ATTENTION: This citation information has been auto-generated from the
+package DESCRIPTION file and may need manual editing, see
+‘help("citation")’ .
+#+end_example
+
+#+BEGIN_SRC sh :session :results output replace :exports both
+  gdalinfo --version
+#+END_SRC
+
+#+RESULTS:
+: GDAL 1.9.2, released 2012/10/08
+
+
+#+BEGIN_SRC sh :session :results output replace :exports both
+  grass64 --version
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+GRASS GIS 6.4.2
+
+Geographic Resources Analysis Support System (GRASS) is Copyright,
+1999-2012 by the GRASS Development Team, and licensed under terms of the
+GNU General Public License (GPL) version >=2.
+ 
+This GRASS 6.4.2 release is coordinated and produced by the
+GRASS Development Team with contributions from all over the world.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+#+end_example
+
+
+**** TODO include version and environment info from the various tools
+
+**** TODO copy software BibTeX entries to database
+

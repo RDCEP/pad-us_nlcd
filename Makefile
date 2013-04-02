@@ -1,58 +1,84 @@
-#!/usr/bin/make -f -I src
+#!/usr/bin/make -f -I scripts
 
-vpath %.R src
+vpath %.R scripts
+vpath %.mk scripts
 vpath %.tif data
 vpath %.img data
 
 .PHONY: cusa pad-us ak hi pr small nbcdZones counties nbcd 
 
+nbcd: scripts/grassNbcd.sh nlcd pad-us counties
+	$(MAKE) --directory=$@ execute
+
+# nbcd: grasscUSA
+# 	scripts/grassNbcd.sh
+
+nlcd:
+	$(MAKE) --directory=$@ nlcd01v1
+
 pad-us:
-        $(MAKE) --directory=$@ cusa
+        $(MAKE) --directory=$@ -I scripts --no-builtin-rules cusa
 
-tangle: pad-us_nlcd.org tangle.el Makefile
-	emacs --quick --batch -l tangle.el 2>&1 \
-          | tee log/tangle.log \
-          | grep ^tangled
-	rsync -arq tangled/ src 
-	touch $@
+tangle: pad-us_nlcd.org Makefile
+	emacs --quick --batch \
+	  --file=pad-us_nlcd.org \
+	  --funcall=org-babel-tangle 2>&1 \
+          | tee log/tangle.log | grep ^Wrote
+	rsync -arv tangled/ scripts
+#	touch $@
 
-src/pad-us_nlcd.mk: tangle
+scripts/pad-us_nlcd.mk: tangle
 
-src/*.R src/*.sh: tangle
+scripts/*.R scripts/*.sh: tangle
 
 data/grid5minWorld.tif: init.R
-	Rscript --vanilla $<
+#	Rscript --vanilla $<
 
 
--include pad-us_nlcd.mk
+# -include scripts/pad-us_nlcd.mk
+cusaProj  = +proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 
+cusaProj += +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs
 
+data/grid5minAeaCUSA.img: 
+	gdalwarp -overwrite -of HFA \
+          -t_srs "$(cusaProj)" \
+          -te -2493045 177285 2342655 3310005 \
+          -tr 30 30 -co "COMPRESSED=YES" data/grid5minWorld.tif $@
 
-nbcd: grasscUSA
-	src/grassNbcd.sh
+data/grid5minAeaCUSA.vrt: 
+	gdalwarp -overwrite -of VRT \
+          -t_srs "$(cusProj)" \
+          -te -2493045 177285 2342655 3310005 \
+          -tr 30 30 data/grid5minWorld.tif $@
+
+countiesUrl := ftp://ftp2.census.gov/geo/tiger/
+countiesUrl := $(countiesUrl)TIGER2010/COUNTY/2010/tl_2010_us_county10.zip
 
 counties:
-	wget -nc -P shp ftp://ftp2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_us_county10.zip
-	unzip -n -d shp shp/tl_2010_us_county10.zip
+	wget --no-clobber --progress=dot:mega \
+	  --directory-prefix=data \
+	  $(countiesUrl) # 2>&1 > log/$@.log
+	unzip -n -d data data/tl_2010_us_county10.zip
 	ogr2ogr -overwrite -progress \
--select STATEFP10,COUNTYFP10,GEOID10 \
--clipdst -2493045 177285 2342655 3310005 \
--t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
-shp/cusaCountiesAea.shp shp/tl_2010_us_county10.shp
+	  -select STATEFP10,COUNTYFP10,GEOID10 \
+	  -clipdst -2493045 177285 2342655 3310005 \
+	  -t_srs "$(cusaProj)" \
+	  data/cusaCountiesAea.shp data/tl_2010_us_county10.shp
 	gdal_rasterize -at -tr 30 30 -co "COMPRESSED=YES" \
--l cusaCountiesAea -a_nodata 0 -a STATEFP10 -ot Byte -of HFA \
-shp/cusaCountiesAea.shp cusaStatesAea.img
-	gdal_rasterize -at -tr 30 30 -co "COMPRESSED=YES" \
--l cusaCountiesAea -a_nodata 0 -a COUNTYFP10 -ot UInt16 -of HFA \
-shp/cusaCountiesAea.shp cusaCountiesAea.img
+	  -l cusaCountiesAea -a_nodata 0 -a COUNTYFP10 -ot UInt16 -of HFA \
+	  data/cusaCountiesAea.shp data/cusaCountiesAea.img
 
-states:
-	wget -nc -P shp ftp://ftp2.census.gov/geo/tiger/TIGER2010/STATE/2010/tl_2010_us_state10.zip
-	unzip -n -d shp shp/tl_2010_us_state10.zip
-	ogr2ogr -overwrite -progress \
--select STATEFP10,GEOID10 \
--clipdst -2493045 177285 2342655 3310005 \
--t_srs "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs" \
-shp/cusaStatesAea.shp shp/tl_2010_us_state10.shp
+states: counties
+#	wget -nc -P shp ftp://ftp2.census.gov/geo/tiger/TIGER2010/STATE/2010/tl_2010_us_state10.zip
+#	unzip -n -d shp shp/tl_2010_us_state10.zip
+#	ogr2ogr -overwrite -progress \
+	  -select STATEFP10,GEOID10 \
+	  -clipdst -2493045 177285 2342655 3310005 \
+	  -t_srs "$(cusaProj)" \
+	  shp/cusaStatesAea.shp shp/tl_2010_us_state10.shp
+	gdal_rasterize -at -tr 30 30 -co "COMPRESSED=YES" \
+	  -l cusaCountiesAea -a_nodata 0 -a STATEFP10 -ot Byte -of HFA \
+	  data/cusaCountiesAea.shp data/cusaStatesAea.img
 
 nbcdZones: # nbcdZones.R
 	ogr2ogr -overwrite \
