@@ -4,3 +4,6 @@
 [submodule "nbcd"]
 	path = nbcd
 	url = git@github.com:RDCEP/NBCD.git
+[submodule "nlcd"]
+	path = nlcd
+	url = git@github.com:RDCEP/nlcd.git
